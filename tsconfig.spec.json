@@ -1,5 +1,16 @@
 {
   "extends": "./tsconfig.json",
   "include": ["src"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "types": ["jest", "node"],
+    "moduleResolution": "Node16",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@medusajs/framework/types": ["./node_modules/@medusajs/framework/dist/types/index.d.ts"],
+      "@medusajs/framework/utils": ["./node_modules/@medusajs/framework/dist/utils/index.d.ts"],
+      "@medusajs/framework/*": ["./node_modules/@medusajs/framework/dist/*"]
+    }
+  }
 }

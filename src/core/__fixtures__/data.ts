@@ -6,68 +6,87 @@ import {
   WRONG_CUSTOMER_EMAIL,
 } from "../../__mocks__/phonepe";
 import { PaymentIntentDataByStatus } from "../../__fixtures__/data";
-import { Customer, PaymentProcessorContext } from "@medusajs/medusa";
+import {
+  InitiatePaymentInput,
+  AuthorizePaymentInput,
+  CapturePaymentInput,
+  RefundPaymentInput,
+  UpdatePaymentInput,
+  Customer,
+} from "@medusajs/framework/types";
 import { PaymentStatusCodeValues, PhonePeS2SResponse } from "../../types";
 
 // INITIATE PAYMENT DATA
 
-export const initiatePaymentContextWithExistingCustomer: PaymentProcessorContext =
+export const initiatePaymentContextWithExistingCustomer: InitiatePaymentInput =
   {
-    email: EXISTING_CUSTOMER_EMAIL,
-    currency_code: "inr",
     amount: 1000,
-    resource_id: "test",
-    customer: { phone: "9999999999", id: "thisIsATestUser" } as any,
-    context: {},
-    paymentSessionData: {
-      readyToPay: true,
-      merchantTransactionId: "test" + Math.round(Math.random() * 1e10),
-      redirectUrl: `https://localhost:8000/order/${
-        "test" + Math.round(Math.random() * 1e10)
-      }`,
+    currency_code: "inr",
+    context: {
+      customer: { phone: "9999999999", id: "thisIsATestUser", email: EXISTING_CUSTOMER_EMAIL } as Customer,
+    },
+    data: {
+      resource_id: "test",
+      id: "test",
     },
   };
 
-export const initiatePaymentContextWithExistingCustomerPhonePeId = {
-  email: EXISTING_CUSTOMER_EMAIL,
-  currency_code: "usd",
+export const initiatePaymentContextWithExistingCustomerPhonePeId: InitiatePaymentInput = {
   amount: 1000,
-  resource_id: "test",
-  customer: {
-    metadata: {
-      phonepe_id: "test",
-    },
-  },
-  context: {},
-  paymentSessionData: {},
-};
-
-export const initiatePaymentContextWithWrongEmail = {
-  email: WRONG_CUSTOMER_EMAIL,
   currency_code: "usd",
-  amount: 1000,
-  resource_id: "test",
-  customer: {},
-  context: {},
-  paymentSessionData: {},
-};
-
-export const initiatePaymentContextWithFailIntentCreation = {
-  email: EXISTING_CUSTOMER_EMAIL,
-  currency_code: "usd",
-  amount: 1000,
-  resource_id: "test",
-  customer: {},
   context: {
+    customer: {
+      id: "test",
+      email: EXISTING_CUSTOMER_EMAIL,
+      metadata: {
+        phonepe_id: "test",
+      },
+    } as Customer,
+  },
+  data: {
+    resource_id: "test",
+    id: "test",
+  },
+};
+
+export const initiatePaymentContextWithWrongEmail: InitiatePaymentInput = {
+  amount: 1000,
+  currency_code: "usd",
+  context: {
+    customer: {
+      id: "test",
+      email: WRONG_CUSTOMER_EMAIL,
+    } as Customer,
+  },
+  data: {
+    resource_id: "test",
+    id: "test",
+  },
+};
+
+export const initiatePaymentContextWithFailIntentCreation: InitiatePaymentInput = {
+  amount: 1000,
+  currency_code: "usd",
+  context: {
+    customer: {
+      id: "test",
+      email: EXISTING_CUSTOMER_EMAIL,
+    } as Customer,
     payment_description: "fail",
   },
-  paymentSessionData: {},
+  data: {
+    resource_id: "test",
+    id: "test",
+  },
 };
 
 // AUTHORIZE PAYMENT DATA
 
-export const authorizePaymentSuccessData = {
-  id: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+export const authorizePaymentSuccessData: AuthorizePaymentInput = {
+  data: {
+    merchantOrderId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+    merchantTransactionId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+  },
 };
 
 // CANCEL PAYMENT DATA
@@ -86,9 +105,10 @@ export const cancelPaymentPartiallyFailData = {
 
 // CAPTURE PAYMENT DATA
 
-export const capturePaymentContextSuccessData = {
-  paymentSessionData: {
-    id: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+export const capturePaymentContextSuccessData: CapturePaymentInput = {
+  data: {
+    merchantOrderId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+    merchantTransactionId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
   },
 };
 
@@ -120,18 +140,25 @@ export const deletePaymentPartiallyFailData = {
 
 // REFUND PAYMENT DATA
 
-export const refundPaymentSuccessData = {
-  id: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+export const refundPaymentSuccessData: RefundPaymentInput = {
+  data: {
+    merchantOrderId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+    merchantTransactionId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+  },
+  amount: 1000,
 };
 
 export const refundPaymentFailData = {
   id: FAIL_INTENT_ID,
 };
 
-// RETRIEVE PAYMENT DATA
+// RETRIEVE PAYMENT DATA (using authorizePayment instead)
 
-export const retrievePaymentSuccessData = {
-  id: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+export const retrievePaymentSuccessData: AuthorizePaymentInput = {
+  data: {
+    merchantOrderId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+    merchantTransactionId: PaymentIntentDataByStatus.PAYMENT_SUCCESS.id,
+  },
 };
 
 export const retrievePaymentFailData = {
@@ -186,19 +213,16 @@ export const updatePaymentContextWithWrongEmail = {
   },
 };
 
-export const updatePaymentContextWithDifferentAmount = {
-  email: EXISTING_CUSTOMER_EMAIL,
-  currency_code: "usd",
+export const updatePaymentContextWithDifferentAmount: UpdatePaymentInput = {
   amount: 300,
-  resource_id: "test",
-  customer: { phone: "9999999999", id: "thisIsATestUser" } as any,
-  context: {},
-  paymentSessionData: {
-    readyToPay: true,
+  currency_code: "usd",
+  context: {
+    customer: { phone: "9999999999", id: "thisIsATestUser", email: EXISTING_CUSTOMER_EMAIL } as Customer,
+  },
+  data: {
+    resource_id: "test",
+    id: "test",
     merchantTransactionId: "test" + Math.round(Math.random() * 1e10),
-    redirectUrl: `https://localhost:8000/order/${
-      "test" + Math.round(Math.random() * 1e10)
-    }`,
   },
 };
 

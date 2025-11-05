@@ -7,8 +7,7 @@ on:
 
 jobs:
   unit-test:
-    runs-on: ubuntu-latest
-    environment: UAT
+    runs-on: ubuntu-latest    
     env:
       PHONEPE_SALT: ${{vars.PHONEPE_SALT}}
       PHONEPE_MERCHANT_ACCOUNT: ${{vars.PHONEPE_MERCHANT_ACCOUNT}} #FOR UAT TESTING MERCHANTUAT

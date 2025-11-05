@@ -1,18 +1,18 @@
 import { Request, Response } from "express";
 import { constructWebhook, handlePaymentHook } from "../utils/utils";
-import { PaymentResponse, PhonePeEvent, PhonePeS2SResponse } from "../../types";
-import { Logger } from "@medusajs/medusa";
+import { PhonePeEvent, PhonePeS2SResponse } from "../../types";
+import { Logger } from "@medusajs/framework/utils";
 
 export default async (req: Request, res: Response) => {
   let event: PhonePeEvent;
   const logger = req.scope.resolve("logger") as Logger;
   try {
     event = constructWebhook({
-      signature: req.headers["x-verify"] as string,
+      signature: (req.headers["x-verify"] || req.headers["x-phonepe-signature"]) as string,
       encodedBody: req.body,
       container: req.scope,
     });
-  } catch (err) {
+  } catch (err: any) {
     logger.info(
       `${JSON.stringify(req.body)} ${err.message} header:${JSON.stringify(
         req.headers

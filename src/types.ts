@@ -1,26 +1,20 @@
-import { PaymentProcessorError, PaymentStatus } from "@medusajs/medusa";
+import { PaymentProviderError } from "@medusajs/framework/types";
 
 export interface PhonePeOptions {
   enabledDebugLogging?: boolean;
   redirectUrl: string;
-  redirectMode: "REDIRECT" | "POST";
   callbackUrl: string;
   merchantId: string;
   salt: string;
   mode: "production" | "test" | "uat";
-
-  /** these settings are legacy considering that in future phonepe may delink payment and capture */
-  /**
-   * Use this flag to capture payment immediately (default is false)
-   */
+  // OAuth configuration for PhonePe v2 API
+  clientId: string;
+  clientSecret: string;
+  tokenCacheEnabled?: boolean;
+  // Legacy options (kept for backward compatibility during migration)
+  redirectMode?: "REDIRECT" | "POST";
   capture?: boolean;
-  /**
-   * set `automatic_payment_methods` to `{ enabled: true }`
-   */
   automatic_payment_methods?: boolean;
-  /**
-   * Set a default description on the intent if the context does not provide one
-   */
   payment_description?: string;
 }
 
@@ -44,6 +38,126 @@ export const PaymentProviderKeys = {
   PHONEPE: "phonepe",
 };
 
+// OAuth Token Types
+export interface OAuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  expires_on: number;
+}
+
+export interface OAuthTokenCache {
+  token: string;
+  expiresAt: number;
+}
+
+// PhonePe v2 API Request Types
+export interface PaymentRequestV2 {
+  merchantOrderId: string;
+  amount: number;
+  expireAfter?: number; // in seconds (min: 300, max: 3600)
+  metaInfo?: {
+    udf1?: string;
+    udf2?: string;
+    udf3?: string;
+    udf4?: string;
+    udf5?: string;
+  };
+  paymentFlow: {
+    type: "PG_CHECKOUT";
+    message?: string;
+    merchantUrls: {
+      redirectUrl: string;
+    };
+    paymentModeConfig?: {
+      enabledPaymentModes?: PaymentMode[];
+      disabledPaymentModes?: PaymentMode[];
+    };
+  };
+}
+
+export interface PaymentMode {
+  type: "UPI_INTENT" | "UPI_COLLECT" | "UPI_QR" | "NET_BANKING" | "CARD";
+  cardTypes?: ("DEBIT_CARD" | "CREDIT_CARD")[];
+}
+
+// PhonePe v2 API Response Types
+export interface PaymentResponseV2 {
+  code: string;
+  message: string;
+  data?: PaymentResponseDataV2;
+  merchantTransactionId?: string;
+}
+
+export interface PaymentResponseDataV2 {
+  merchantTransactionId: string;
+  instrumentResponse: InstrumentResponseV2;
+}
+
+export interface InstrumentResponseV2 {
+  type: string;
+  redirectInfo?: RedirectInfoV2;
+  qrData?: string;
+  intentUrl?: string;
+}
+
+export interface RedirectInfoV2 {
+  url: string;
+  mode: string;
+}
+
+// Order Status Response Types
+export interface OrderStatusResponseV2 {
+  code: string;
+  message: string;
+  data?: OrderStatusDataV2;
+}
+
+export interface OrderStatusDataV2 {
+  merchantOrderId: string;
+  transactionId?: string;
+  amount: number;
+  state: string;
+  responseCode: string;
+  paymentInstrument?: PaymentInstrumentV2;
+}
+
+export interface PaymentInstrumentV2 {
+  type: string;
+  utr?: string;
+  cardType?: string;
+  pgTransactionId?: string;
+  bankTransactionId?: string;
+  pgAuthorizationCode?: string;
+  arn?: string;
+  bankId?: string;
+  pgServiceTransactionId?: string;
+}
+
+// Refund Request/Response Types
+export interface RefundRequestV2 {
+  merchantId: string;
+  merchantRefundId: string;
+  originalTransactionId: string;
+  amount: number;
+  callbackUrl: string;
+}
+
+export interface RefundResponseV2 {
+  code: string;
+  message: string;
+  data?: RefundResponseDataV2;
+}
+
+export interface RefundResponseDataV2 {
+  merchantRefundId: string;
+  transactionId: string;
+  amount: number;
+  state: string;
+  responseCode: string;
+}
+
+// Legacy types (for backward compatibility during migration)
 export type PaymentRequest =
   | PaymentRequestUPI
   | PaymentRequestUPICollect
@@ -68,6 +182,7 @@ export interface PaymentRequestUPI {
   deviceContext?: DeviceContext;
   paymentInstrument: PaymentInstrumentUPI;
 }
+
 export interface PaymentResponseUPI {
   success: boolean;
   code: PaymentStatusCodeValues;
@@ -103,11 +218,6 @@ export interface PaymentRequestUPICollect {
   paymentInstrument: PaymentInstrument;
 }
 
-export interface AccountConstraint {
-  accountNumber: string;
-  ifsc: string;
-}
-
 export interface PaymentResponseUPICollect {
   success: boolean;
   code: PaymentStatusCodeValues;
@@ -131,11 +241,6 @@ export interface PaymentRequestUPIQr {
   callbackUrl: string;
   mobileNumber: string;
   paymentInstrument: PaymentInstrument;
-}
-
-export interface AccountConstraint {
-  accountNumber: string;
-  ifsc: string;
 }
 
 export interface PaymentResponseUPIQr {
@@ -269,6 +374,7 @@ export enum PaymentStatusCodeValues {
   "PAYMENT_SUCCESS" = "PAYMENT_SUCCESS",
   "PAYMENT_CANCELLED" = "PAYMENT_CANCELLED",
   "PAYMENT_INITIATED" = "PAYMENT_INITIATED",
+  "SUCCESS" = "SUCCESS",
 }
 
 export interface PaymentCheckStatusResponseNetBanking {
@@ -318,11 +424,12 @@ export interface PaymentInstrumentUPI {
   accountConstraints?: AccountConstraint[];
 }
 
+// Webhook Event Types
 export interface PhonePeEvent {
-  type: PaymentStatusCodeValues;
+  event: string; // checkout.order.completed, checkout.order.failed, pg.refund.completed, pg.refund.failed
   id: string;
   data: {
-    object: PhonePeS2SResponse | PaymentProcessorError;
+    object: PhonePeS2SResponse | PaymentProviderError;
   };
 }
 
@@ -336,6 +443,7 @@ export interface PhonePeS2SResponse {
 export interface PhonePeS2SResponseData {
   merchantId: string;
   merchantTransactionId: string;
+  merchantOrderId?: string;
   transactionId: string;
   amount: number;
   state: string;

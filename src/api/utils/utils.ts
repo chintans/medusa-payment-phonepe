@@ -5,26 +5,16 @@ import {
   Logger,
   OrderService,
   PaymentCollection,
-  PaymentProcessorError,
-  PostgresError,
-} from "@medusajs/medusa";
+  PaymentProviderError,
+} from "@medusajs/framework/utils";
 import { AwilixContainer } from "awilix";
-import { MedusaError } from "medusa-core-utils";
+import { MedusaError } from "@medusajs/framework/utils";
 import { EOL } from "os";
 import SHA256 from "crypto-js/sha256";
-import axios from "axios";
-import api from "..";
 import {
-  PaymentRequestUPI,
-  PaymentRequestUPICollect,
-  PaymentRequestUPIQr,
-  RefundRequest,
   PhonePeEvent,
-  PaymentResponseData,
-  PaymentResponse,
   PhonePeS2SResponse,
   PaymentStatusCodeValues,
-  PhonePeS2SResponseData,
 } from "../../types";
 import PhonePeProviderService from "../../services/phonepe-provider";
 
@@ -36,7 +26,7 @@ export function constructWebhook({
   container,
 }: {
   signature: string;
-  encodedBody: { response: string };
+  encodedBody: { response?: string } | string;
   container: AwilixContainer;
 }): PhonePeEvent {
   const logger = container.resolve("logger") as Logger;
@@ -44,28 +34,31 @@ export function constructWebhook({
     PAYMENT_PROVIDER_KEY
   ) as PhonePeProviderService;
 
+  // Handle both old format (encodedBody.response) and new format (direct JSON)
+  const encodedData =
+    typeof encodedBody === "string"
+      ? encodedBody
+      : encodedBody.response || JSON.stringify(encodedBody);
+
   logger.info(
     `signature ${signature}\n encoded: ${JSON.stringify(encodedBody)}`
   );
-  return phonepeProviderService.constructWebhookEvent(
-    encodedBody.response,
-    signature
-  );
+  return phonepeProviderService.constructWebhookEvent(encodedData, signature);
 }
 
-export function isPaymentCollection(id) {
+export function isPaymentCollection(id: string): boolean {
   return id && id.startsWith("paycol");
 }
 
 export function buildError(
   event: string,
-  err: PaymentProcessorError & Error
+  err: PaymentProviderError & Error
 ): string {
-  console.log(JSON.stringify(err));
   let message = `PhonePe webhook ${event} handling failed${EOL}${
     err?.code ?? err?.message
   }`;
-  if (err?.code === PostgresError.SERIALIZATION_FAILURE) {
+  // Check for PostgreSQL serialization failure (error code 23505)
+  if (err?.code === "SERIALIZATION_FAILURE" || err?.code === "23505") {
     message = `PhonePe webhook ${event} handle failed. This can happen when this webhook is triggered during a cart completion and can be ignored. This event should be retried automatically.${EOL}${
       err?.detail ?? err?.message
     }`;
@@ -89,17 +82,30 @@ export async function handlePaymentHook({
   paymentIntent: PhonePeS2SResponse;
 }): Promise<{ statusCode: number }> {
   const logger = container.resolve("logger") as Logger;
-  // logger.info("Data received: " + JSON.stringify(paymentIntent));
 
-  let cartId = paymentIntent.data.merchantTransactionId; // Backward compatibility
+  // Handle both old format (merchantTransactionId) and new format (merchantOrderId)
+  let merchantOrderId =
+    paymentIntent.data?.merchantOrderId ||
+    paymentIntent.data?.merchantTransactionId;
 
-  const cartIdParts = cartId.split("_");
-  cartId = `${cartIdParts[0]}_${cartIdParts[1]}`;
+  if (!merchantOrderId) {
+    logger.error("No merchantOrderId or merchantTransactionId found in webhook");
+    return { statusCode: 400 };
+  }
+
+  // Extract cart ID from merchantOrderId (format: cartId_sequence)
+  const cartIdParts = merchantOrderId.split("_");
+  const cartId = `${cartIdParts[0]}_${cartIdParts[1]}`;
   logger.info("computed cart: " + cartId);
   const resourceId = cartId;
 
-  switch (event.type) {
+  // Handle new webhook event types
+  const eventType = event.event || event.type || paymentIntent.code;
+
+  switch (eventType) {
+    case "checkout.order.completed":
     case PaymentStatusCodeValues.PAYMENT_SUCCESS:
+    case PaymentStatusCodeValues.SUCCESS:
       try {
         await onPaymentIntentSucceeded({
           eventId: event.id,
@@ -109,23 +115,34 @@ export async function handlePaymentHook({
           isPaymentCollection: isPaymentCollection(resourceId),
           container,
         });
-      } catch (err) {
-        const message = buildError(event.type, err);
+      } catch (err: any) {
+        const message = buildError(eventType, err);
         logger.error(message);
         return { statusCode: 409 };
       }
-
       break;
 
-    case PaymentStatusCodeValues.PAYMENT_ERROR: {
+    case "checkout.order.failed":
+    case PaymentStatusCodeValues.PAYMENT_ERROR:
+    case PaymentStatusCodeValues.PAYMENT_DECLINED: {
       const message = paymentIntent.message;
       logger.error(
         "The payment of the payment intent " +
-          `${paymentIntent.data.merchantTransactionId} has failed${EOL}${message}`
+          `${merchantOrderId} has failed${EOL}${message}`
       );
       break;
     }
+
+    case "pg.refund.completed":
+    case "pg.refund.failed":
+      logger.info(
+        `Refund webhook received: ${eventType} for ${merchantOrderId}`
+      );
+      // Handle refund webhooks if needed
+      break;
+
     default:
+      logger.info(`Unhandled webhook event type: ${eventType}`);
       return { statusCode: 204 };
   }
 
@@ -139,12 +156,19 @@ async function onPaymentIntentSucceeded({
   resourceId,
   isPaymentCollection,
   container,
+}: {
+  eventId: string;
+  paymentIntent: PhonePeS2SResponse;
+  cartId: string;
+  resourceId: string;
+  isPaymentCollection: boolean;
+  container: AwilixContainer;
 }) {
   const manager = container.resolve("manager");
 
   await manager.transaction(async (transactionManager) => {
     if (isPaymentCollection) {
-      await capturePaymenCollectiontIfNecessary({
+      await capturePaymentCollectionIfNecessary({
         paymentIntent,
         resourceId,
         container,
@@ -166,23 +190,14 @@ async function onPaymentIntentSucceeded({
   });
 }
 
-async function onPaymentAmountCapturableUpdate({ eventId, cartId, container }) {
-  const manager = container.resolve("manager");
-
-  await manager.transaction(async (transactionManager) => {
-    await completeCartIfNecessary({
-      eventId,
-      cartId,
-      container,
-      transactionManager,
-    });
-  });
-}
-
-async function capturePaymenCollectiontIfNecessary({
+async function capturePaymentCollectionIfNecessary({
   paymentIntent,
   resourceId,
   container,
+}: {
+  paymentIntent: PhonePeS2SResponse;
+  resourceId: string;
+  container: AwilixContainer;
 }) {
   const manager = container.resolve("manager");
   const paymentCollectionService = container.resolve(
@@ -195,13 +210,15 @@ async function capturePaymenCollectiontIfNecessary({
     .catch(() => undefined)) as PaymentCollection;
 
   if (paycol?.payments?.length) {
-    // logger.info(`attempting to collect payment ${JSON.stringify(paycol)}`);
-    logger.info(
-      `attempting to collect payment of ${paymentIntent.merchantTransacionId}`
-    );
+    const merchantOrderId =
+      paymentIntent.data?.merchantOrderId ||
+      paymentIntent.data?.merchantTransactionId;
+    logger.info(`attempting to collect payment of ${merchantOrderId}`);
 
     const payment = paycol.payments.find(
-      (pay) => pay.data.id === paymentIntent.merchantTransacionId
+      (pay: any) =>
+        pay.data?.merchantOrderId === merchantOrderId ||
+        pay.data?.merchantTransactionId === merchantOrderId
     );
     if (payment && !payment.captured_at) {
       await manager.transaction(async (manager) => {
@@ -217,6 +234,10 @@ async function capturePaymentIfNecessary({
   cartId,
   transactionManager,
   container,
+}: {
+  cartId: string;
+  transactionManager: any;
+  container: AwilixContainer;
 }) {
   const logger = container.resolve("logger") as Logger;
   logger.info("attempting to capture payment");
@@ -226,12 +247,14 @@ async function capturePaymentIfNecessary({
     .retrieveByCartId(cartId)
     .catch(() => {
       logger.info(`No Order with cart Id ${cartId}`);
+      return undefined;
     });
-  logger.info(`attempting to capture payment order ${order!.id}`);
-  if (order?.payment_status !== "captured") {
+
+  if (order && order.payment_status !== "captured") {
+    logger.info(`attempting to capture payment order ${order.id}`);
     await orderService
       .withTransaction(transactionManager)
-      .capturePayment(order!.id);
+      .capturePayment(order.id);
   }
 }
 
@@ -240,6 +263,11 @@ async function completeCartIfNecessary({
   cartId,
   container,
   transactionManager,
+}: {
+  eventId: string;
+  cartId: string;
+  container: AwilixContainer;
+  transactionManager: any;
 }) {
   const orderService = container.resolve("orderService");
   const logger = container.resolve("logger") as Logger;
@@ -249,7 +277,7 @@ async function completeCartIfNecessary({
     .catch(() => undefined);
 
   if (!order) {
-    logger.info(`initiating cart completing startegy ${cartId}`);
+    logger.info(`initiating cart completing strategy ${cartId}`);
     const completionStrat: AbstractCartCompletionStrategy = container.resolve(
       "cartCompletionStrategy"
     );
@@ -279,15 +307,10 @@ async function completeCartIfNecessary({
     const cart = await cartService
       .withTransaction(transactionManager)
       .retrieve(cartId, { select: ["context"] });
-    // logger.info(`cart retrieved ${JSON.stringify(cart)}`);
     const { response_code, response_body } = await completionStrat
       .withTransaction(transactionManager)
       .complete(cartId, idempotencyKey, { ip: cart.context?.ip as string });
-    /* logger.info(
-      `cart completed status: ${response_code} body: ${JSON.stringify(
-        response_body
-      )}`
-    );*/
+
     if (response_code !== 200) {
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
@@ -300,6 +323,7 @@ async function completeCartIfNecessary({
   }
 }
 
+// Legacy checksum functions (kept for backward compatibility with webhook validation)
 export function createPostCheckSumHeader(
   payload: any,
   salt?: string,
@@ -307,8 +331,8 @@ export function createPostCheckSumHeader(
   space = 2
 ) {
   const SALT_KEY = salt ?? process.env.PHONEPE_SALT ?? "test-salt";
-  const encodedBody = btoa(JSON.stringify(payload, null, space));
-  const base64string = encodedBody + `${apiString}${SALT_KEY}`;
+  const encodedBody = Buffer.from(JSON.stringify(payload, null, space)).toString("base64");
+  const base64string = encodedBody + `${apiString ?? ""}${SALT_KEY}`;
   const encodedPayload = SHA256(base64string).toString();
   const checksum = `${encodedPayload}###1`;
   return { checksum, encodedBody };
@@ -320,21 +344,22 @@ export function verifyPostCheckSumHeader(
   apiString?: string
 ) {
   const SALT_KEY = salt ?? process.env.PHONEPE_SALT ?? "test-salt";
-  const base64string = payload + `${apiString}${SALT_KEY}`;
+  const base64string = payload + `${apiString ?? ""}${SALT_KEY}`;
   const encodedPayload = SHA256(base64string).toString();
   const checksum = `${encodedPayload}###1`;
   return { checksum, payload };
 }
 
+// Legacy functions (deprecated - kept for backward compatibility)
 export function createPostPaymentChecksumHeader(
-  payload: PaymentRequestUPI | PaymentRequestUPICollect | PaymentRequestUPIQr,
+  payload: any,
   salt?: string
 ) {
   return createPostCheckSumHeader(payload, salt, "/pg/v1/pay");
 }
 
 export function createPostRefundChecksumHeader(
-  payload: RefundRequest,
+  payload: any,
   salt?: string
 ) {
   return createPostCheckSumHeader(payload, salt, "/pg/v1/refund");
@@ -357,7 +382,7 @@ export function createGetChecksumHeader(
 ) {
   const SALT_KEY = salt ?? process.env.PHONEPE_SALT ?? "test-salt";
   const asciiString = `/pg/v1/status/${merchantId}/${merchantTransactionId}${SALT_KEY}`;
-  const encodedPayload = SHA256(asciiString);
+  const encodedPayload = SHA256(asciiString).toString();
   const checksum = `${encodedPayload}###1`;
   return { checksum };
 }
@@ -369,7 +394,10 @@ export function createGetChecksumTransactionHeader(
 ) {
   const SALT_KEY = salt ?? process.env.PHONEPE_SALT ?? "test-salt";
   const asciiString = `/pg/v3/transaction/${merchantId}/${merchantTransactionId}/status${SALT_KEY}`;
-  const encodedPayload = SHA256(asciiString);
+  const encodedPayload = SHA256(asciiString).toString();
   const checksum = `${encodedPayload}###1`;
   return { checksum };
 }
+
+// Export buildError for backward compatibility
+export { buildError };

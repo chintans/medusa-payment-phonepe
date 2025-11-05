@@ -1,7 +1,7 @@
 import phonepeHooks from "./phonepe";
 import { Router } from "express";
 import bodyParser from "body-parser";
-import { wrapHandler } from "@medusajs/medusa";
+import { wrapHandler } from "@medusajs/framework/http";
 import cors from "cors";
 
 const route = Router();
