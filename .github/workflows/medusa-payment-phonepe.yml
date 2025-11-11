@@ -19,9 +19,12 @@ jobs:
     name: Lint & Test
     runs-on: ubuntu-latest
     env:
-      PHONEPE_SALT: ${{ vars.PHONEPE_SALT }}
+      PHONEPE_WEBHOOK_USERNAME: ${{ vars.PHONEPE_WEBHOOK_USERNAME }}
+      PHONEPE_WEBHOOK_PASSWORD: ${{ vars.PHONEPE_WEBHOOK_PASSWORD }}
       PHONEPE_MERCHANT_ACCOUNT: ${{ vars.PHONEPE_MERCHANT_ACCOUNT }}
-      DISABLE_MOCKS: "true"
+      PHONEPE_CLIENT_ID: ${{ vars.PHONEPE_CLIENT_ID }}
+      PHONEPE_CLIENT_SECRET: ${{ vars.PHONEPE_CLIENT_SECRET }}
+      DISABLE_MOCKS: "false"
       PHONEPE_MODE: "uat"
     strategy:
       matrix:
@@ -61,11 +64,13 @@ jobs:
     permissions:
       contents: read
     env:
-      PHONEPE_SALT: ${{ vars.PHONEPE_SALT }}
+      PHONEPE_WEBHOOK_USERNAME: ${{ vars.PHONEPE_WEBHOOK_USERNAME }}
+      PHONEPE_WEBHOOK_PASSWORD: ${{ vars.PHONEPE_WEBHOOK_PASSWORD }}
       PHONEPE_MERCHANT_ACCOUNT: ${{ vars.PHONEPE_MERCHANT_ACCOUNT }}
-      DISABLE_MOCKS: "true"
+      PHONEPE_CLIENT_ID: ${{ vars.PHONEPE_CLIENT_ID }}
+      PHONEPE_CLIENT_SECRET: ${{ vars.PHONEPE_CLIENT_SECRET }}
+      DISABLE_MOCKS: "false"
       PHONEPE_MODE: "uat"
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
