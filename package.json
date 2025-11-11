@@ -1,27 +1,43 @@
 {
-  "name": "medusa-payment-phonepe",
+  "name": "@promactinfo/medusa-payment-phonepe",
   "version": "2.0.0",
-  "description": "PhonePe Payment provider for Meduas Commerce",
+  "description": "PhonePe payment provider for Medusa Commerce",
+  "private": false,
   "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/chintans/medusa-payment-phonepe",
-    "directory": "packages/medusa-payment-phonepe"
+    "url": "git+https://github.com/chintans/medusa-payment-phonepe.git"
   },
+  "bugs": {
+    "url": "https://github.com/chintans/medusa-payment-phonepe/issues"
+  },
+  "homepage": "https://github.com/chintans/medusa-payment-phonepe#readme",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "author": "Chintan Shah",
   "license": "MIT",
   "scripts": {
     "prepare": "husky && cross-env NODE_ENV=production pnpm run build",
-    "test": "vitest ",
+    "test": "vitest run",
     "build": "vite build",
     "build:watch": "vite build --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
+    "prepublishOnly": "pnpm run lint && pnpm run test && pnpm run build && pnpm run build:types",
     "release": "standard-version",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",
@@ -69,10 +85,13 @@
     "typeorm": "^0.3.20"
   },
   "dependencies": {
-    "@medusajs/framework": "^2.0.0",
     "crypto-js": "^4.1.1",
     "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node.tgz",
     "ts-retry": "^4.2.1"
+  },
+  "engines": {
+    "node": ">=18.18",
+    "pnpm": ">=8"
   },
   "gitHead": "81a7ff73d012fda722f6e9ef0bd9ba0232d37808",
   "keywords": [
