@@ -7,9 +7,6 @@ settings:
 importers:
   .:
     dependencies:
-      "@medusajs/framework":
-        specifier: ^2.0.0
-        version: 2.11.2(@medusajs/cli@2.11.2(@opentelemetry/api@1.9.0)(@types/node@24.10.0))(@types/node@24.10.0)(ioredis@5.8.2)(vite@7.2.2(@types/node@24.10.0)(jiti@2.6.1)(terser@5.44.0)(yaml@2.8.1))
       crypto-js:
         specifier: ^4.1.1
         version: 4.2.0
@@ -32,6 +29,9 @@ importers:
       "@eslint/js":
         specifier: ^9.39.1
         version: 9.39.1
+      "@medusajs/framework":
+        specifier: ^2.0.0
+        version: 2.11.2(@medusajs/cli@2.11.2(@opentelemetry/api@1.9.0)(@types/node@24.10.0))(@types/node@24.10.0)(ioredis@5.8.2)(vite@7.2.2(@types/node@24.10.0)(jiti@2.6.1)(terser@5.44.0)(yaml@2.8.1))
       "@types/express":
         specifier: ^4.17.17
         version: 4.17.25
