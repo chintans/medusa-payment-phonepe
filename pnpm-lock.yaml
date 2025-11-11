@@ -7,12 +7,6 @@ settings:
 importers:
   .:
     dependencies:
-      "@eslint/eslintrc":
-        specifier: ^3.3.1
-        version: 3.3.1
-      "@eslint/js":
-        specifier: ^9.39.1
-        version: 9.39.1
       "@medusajs/framework":
         specifier: ^2.0.0
         version: 2.11.2(@medusajs/cli@2.11.2(@opentelemetry/api@1.9.0)(@types/node@24.10.0))(@types/node@24.10.0)(ioredis@5.8.2)(vite@7.2.2(@types/node@24.10.0)(jiti@2.6.1)(terser@5.44.0)(yaml@2.8.1))
@@ -32,6 +26,12 @@ importers:
       "@commitlint/config-conventional":
         specifier: ^19.0.0
         version: 19.8.1
+      "@eslint/eslintrc":
+        specifier: ^3.3.1
+        version: 3.3.1
+      "@eslint/js":
+        specifier: ^9.39.1
+        version: 9.39.1
       "@types/express":
         specifier: ^4.17.17
         version: 4.17.25
@@ -45,7 +45,7 @@ importers:
         specifier: ^12.0.5
         version: 12.0.5
       axios:
-        specifier: ^1.7.0
+        specifier: ^1.13.2
         version: 1.13.2
       axios-mock-adapter:
         specifier: ^2.1.0

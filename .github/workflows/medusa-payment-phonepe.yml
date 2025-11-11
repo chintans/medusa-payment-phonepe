@@ -1,41 +1,96 @@
 name: medusa-payment-phonepe
+
 on:
   push:
+    branches:
+      - master
+    tags:
+      - "v*"
   pull_request:
     branches:
       - master
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  unit-test:
-    runs-on: ubuntu-latest    
+  quality-checks:
+    name: Lint & Test
+    runs-on: ubuntu-latest
     env:
-      PHONEPE_SALT: ${{vars.PHONEPE_SALT}}
-      PHONEPE_MERCHANT_ACCOUNT: ${{vars.PHONEPE_MERCHANT_ACCOUNT}} #FOR UAT TESTING MERCHANTUAT
+      PHONEPE_SALT: ${{ vars.PHONEPE_SALT }}
+      PHONEPE_MERCHANT_ACCOUNT: ${{ vars.PHONEPE_MERCHANT_ACCOUNT }}
       DISABLE_MOCKS: "true"
       PHONEPE_MODE: "uat"
     strategy:
       matrix:
-        node-verion: [16.x]
+        node-version: [20.x]
     steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.9.1
-        with:
-          access_token: ${{ github.token }}
-
       - name: Checkout
-        uses: actions/checkout@v2.3.5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3.1.1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          node-version: ${{ matrix.node-verion }}
+          version: 10
 
-      - name: 'yarn install'
-        working-directory: ./
-        run: yarn
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
 
-      - name: 'run unit tests'
-        working-directory: ./
-        run: yarn run test
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test -- --run
+
+      - name: Build
+        run: pnpm run build
+
+  publish:
+    name: Publish to npm
+    needs: quality-checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+    env:
+      PHONEPE_SALT: ${{ vars.PHONEPE_SALT }}
+      PHONEPE_MERCHANT_ACCOUNT: ${{ vars.PHONEPE_MERCHANT_ACCOUNT }}
+      DISABLE_MOCKS: "true"
+      PHONEPE_MODE: "uat"
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Publish
+        run: pnpm publish --access public
