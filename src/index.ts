@@ -1,3 +1,12 @@
-export * from "./types"
-export * from "./core/phonepe-base"
-export * from "./services/phonepe-provider"
+import { ModuleProvider, Modules } from "@medusajs/framework/utils";
+import PhonePeProviderService from "./services/phonepe-provider.js";
+
+const services = [PhonePeProviderService];
+
+export default ModuleProvider(Modules.PAYMENT, {
+  services,
+});
+
+export * from "./types.js";
+export * from "./core/phonepe-base.js";
+export * from "./services/phonepe-provider.js";

@@ -2,12 +2,13 @@
 
 PhonePe Payment provider for MedusaJS v2.x
 
-[PHONEPE](https://phonepe.com) is an immensely popular payment gateway with a host of features. 
+[PHONEPE](https://phonepe.com) is an immensely popular payment gateway with a host of features.
 This plugin enables the PhonePe payment interface on [MedusaJS v2.x](https://medusajs.com) commerce stack.
 
 ## Version
 
 **v2.0.0** - This version is compatible with:
+
 - MedusaJS v2.x
 - PhonePe Payment Gateway API v2 (with OAuth authentication)
 
@@ -46,6 +47,8 @@ PHONEPE_CLIENT_ID=<your-oauth-client-id>
 PHONEPE_CLIENT_SECRET=<your-oauth-client-secret>
 PHONEPE_REDIRECT_URL=<your-redirect-url>
 PHONEPE_CALLBACK_URL=<your-callback-url>
+PHONEPE_MERCHANT_USERNAME=<your-merchant-username>  # Required for webhook validation
+PHONEPE_MERCHANT_PASSWORD=<your-merchant-password>  # Required for webhook validation
 ```
 
 ### MedusaJS Configuration
@@ -62,13 +65,21 @@ export default defineConfig({
     {
       resolve: "medusa-payment-phonepe",
       options: {
-        redirectUrl: process.env.PHONEPE_REDIRECT_URL || "http://localhost:8000/api/payment-confirmed",
-        callbackUrl: process.env.PHONEPE_CALLBACK_URL || "http://localhost:9000/phonepe/hook",
+        redirectUrl:
+          process.env.PHONEPE_REDIRECT_URL ||
+          "http://localhost:8000/api/payment-confirmed",
+        callbackUrl:
+          process.env.PHONEPE_CALLBACK_URL ||
+          "http://localhost:9000/phonepe/hooks",
         salt: process.env.PHONEPE_SALT,
         merchantId: process.env.PHONEPE_MERCHANT_ID,
         clientId: process.env.PHONEPE_CLIENT_ID,
         clientSecret: process.env.PHONEPE_CLIENT_SECRET,
-        mode: (process.env.PHONEPE_MODE as "production" | "uat" | "test") || "test",
+        clientVersion: 1, // PhonePe client version (typically 1)
+        mode:
+          (process.env.PHONEPE_MODE as "production" | "uat" | "test") || "test",
+        merchantUsername: process.env.PHONEPE_MERCHANT_USERNAME, // Required for webhook validation
+        merchantPassword: process.env.PHONEPE_MERCHANT_PASSWORD, // Required for webhook validation
         tokenCacheEnabled: true, // Optional: Enable OAuth token caching (default: true)
         enabledDebugLogging: false, // Optional: Enable debug logging
       },
@@ -79,17 +90,20 @@ export default defineConfig({
 
 ### Configuration Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `redirectUrl` | string | Yes | URL to redirect customers after payment |
-| `callbackUrl` | string | Yes | Server-to-server webhook callback URL |
-| `salt` | string | Yes | PhonePe provided salt key for webhook verification |
-| `merchantId` | string | Yes | Your PhonePe merchant ID |
-| `clientId` | string | Yes | OAuth client ID for PhonePe API v2 |
-| `clientSecret` | string | Yes | OAuth client secret for PhonePe API v2 |
-| `mode` | string | Yes | `production`, `uat`, or `test` |
-| `tokenCacheEnabled` | boolean | No | Enable OAuth token caching (default: `true`) |
-| `enabledDebugLogging` | boolean | No | Enable debug logging (default: `false`) |
+| Option                | Type    | Required    | Description                                                           |
+| --------------------- | ------- | ----------- | --------------------------------------------------------------------- |
+| `redirectUrl`         | string  | Yes         | URL to redirect customers after payment                               |
+| `callbackUrl`         | string  | Yes         | Server-to-server webhook callback URL                                 |
+| `salt`                | string  | Yes         | PhonePe provided salt key (legacy, kept for backward compatibility)   |
+| `merchantId`          | string  | Yes         | Your PhonePe merchant ID                                              |
+| `clientId`            | string  | Yes         | OAuth client ID for PhonePe API v2                                    |
+| `clientSecret`        | string  | Yes         | OAuth client secret for PhonePe API v2                                |
+| `clientVersion`       | number  | Yes         | PhonePe client version (typically 1)                                  |
+| `mode`                | string  | Yes         | `production`, `uat`, or `test`                                        |
+| `merchantUsername`    | string  | Recommended | Merchant username for webhook validation (recommended for production) |
+| `merchantPassword`    | string  | Recommended | Merchant password for webhook validation (recommended for production) |
+| `tokenCacheEnabled`   | boolean | No          | Enable OAuth token caching (default: `true`)                          |
+| `enabledDebugLogging` | boolean | No          | Enable debug logging (default: `false`)                               |
 
 ## API Endpoints
 
@@ -104,10 +118,25 @@ The plugin uses PhonePe Payment Gateway API v2 with the following endpoints:
 
 The plugin supports the following PhonePe webhook events:
 
-- `checkout.order.completed` - Payment succeeded
-- `checkout.order.failed` - Payment failed
-- `pg.refund.completed` - Refund completed
-- `pg.refund.failed` - Refund failed
+- `checkout.order.completed` (PG_ORDER_COMPLETED) - Payment succeeded
+- `checkout.order.failed` (PG_ORDER_FAILED) - Payment failed
+- `pg.refund.completed` (PG_REFUND_COMPLETED) - Refund completed
+- `pg.refund.failed` (PG_REFUND_FAILED) - Refund failed
+
+### Webhook Validation
+
+The plugin uses PhonePe's official SDK (`pg-sdk-node`) for webhook validation. The SDK's `validateCallback` method is used to verify the authenticity of webhook callbacks from PhonePe.
+
+**Recommended Configuration:**
+
+- Set `merchantUsername` and `merchantPassword` in your configuration to enable SDK-based webhook validation
+- The plugin will automatically use the SDK's validation method when these credentials are provided
+- If credentials are not provided, the plugin falls back to legacy signature-based validation
+
+**Webhook Endpoint:**
+
+- Default endpoint: `/phonepe/hooks`
+- Configure this URL in your PhonePe merchant dashboard as the callback URL
 
 ## Migration from v1.x to v2.x
 
@@ -123,6 +152,7 @@ The plugin supports the following PhonePe webhook events:
 1. **Upgrade MedusaJS**: Ensure your MedusaJS installation is upgraded to v2.x
 
 2. **Update Plugin Version**: Install the latest version of the plugin:
+
    ```bash
    yarn add medusa-payment-phonepe@^2.0.0
    ```
@@ -130,6 +160,7 @@ The plugin supports the following PhonePe webhook events:
 3. **Obtain OAuth Credentials**: Get your OAuth Client ID and Client Secret from PhonePe dashboard
 
 4. **Update Configuration**: Add OAuth credentials to your plugin configuration:
+
    ```typescript
    {
      resolve: "medusa-payment-phonepe",
@@ -228,6 +259,7 @@ Set `mode: "test"` for local testing (mocked responses).
 ### OAuth Token Issues
 
 If you encounter OAuth authentication errors:
+
 1. Verify your `clientId` and `clientSecret` are correct
 2. Check that your PhonePe account has API access enabled
 3. Ensure your environment variables are properly loaded
@@ -235,6 +267,7 @@ If you encounter OAuth authentication errors:
 ### Webhook Issues
 
 If webhooks are not being received:
+
 1. Verify your `callbackUrl` is publicly accessible
 2. Check webhook signature verification
 3. Ensure your `salt` key matches PhonePe dashboard
@@ -242,6 +275,7 @@ If webhooks are not being received:
 ### Payment Status Issues
 
 If payment status checks fail:
+
 1. Verify the `merchantOrderId` format
 2. Check that the order exists in PhonePe system
 3. Review debug logs (enable `enabledDebugLogging: true`)
@@ -251,6 +285,7 @@ If payment status checks fail:
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
 Please make sure to:
+
 - Update tests as appropriate
 - Follow the existing code style
 - Update documentation for any API changes
@@ -262,6 +297,7 @@ Please make sure to:
 ## Support
 
 For issues and questions:
+
 - Open an issue on GitHub
 - Check the [PhonePe Developer Documentation](https://developer.phonepe.com)
 - Review the [MedusaJS Documentation](https://docs.medusajs.com)

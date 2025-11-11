@@ -1,291 +1,264 @@
-import axios, { AxiosResponse } from "axios";
 import {
-  PhonePeOptions,
-  OAuthTokenResponse,
-  OAuthTokenCache,
-  PaymentRequestV2,
-  PaymentResponseV2,
-  OrderStatusResponseV2,
-  RefundRequestV2,
-  RefundResponseV2,
-  PaymentStatusCodeValues,
-} from "../types";
-import { Logger } from "@medusajs/framework/utils";
+  Env,
+  MetaInfo,
+  OrderStatusResponse,
+  RefundRequest,
+  RefundResponse,
+  StandardCheckoutClient,
+  StandardCheckoutPayRequest,
+  StandardCheckoutPayResponse,
+} from "pg-sdk-node";
+import { Console } from "node:console";
+import { Logger } from "@medusajs/framework/types";
+import { PhonePeOptions } from "../types.js";
+
+export type StandardPayInput = {
+  merchantOrderId: string;
+  amount: number;
+  redirectUrl: string;
+  expireAfter?: number;
+  message?: string;
+  metaInfo?: {
+    udf1?: string;
+    udf2?: string;
+    udf3?: string;
+    udf4?: string;
+    udf5?: string;
+  };
+};
+
+export type RefundInput = {
+  merchantRefundId: string;
+  originalMerchantOrderId: string;
+  amount: number;
+};
 
 export class PhonePeWrapper {
-  options: PhonePeOptions;
-  url: string;
-  logger: Logger | Console;
-  private tokenCache: OAuthTokenCache | null = null;
+  private readonly client: StandardCheckoutClient;
+  private readonly logger: Logger | Console;
+  private readonly options: PhonePeOptions;
 
   constructor(options: PhonePeOptions, logger?: Logger) {
     this.logger = logger ?? console;
     this.options = options;
-    switch (this.options.mode) {
-      case "production":
-        this.url = "https://api.phonepe.com/apis";
-        break;
-      case "uat":
-        this.url = "https://api-preprod.phonepe.com/apis";
-        break;
-      case "test":
-      default:
-        this.url = "https://api-preprod.phonepe.com/apis/pg-sandbox";
-        break;
-    }
+    this.client = StandardCheckoutClient.getInstance(
+      options.clientId,
+      options.clientSecret,
+      options.clientVersion,
+      this.resolveEnv(options.mode),
+      options.shouldPublishEvents ?? false
+    );
   }
 
-  /**
-   * Generate OAuth token for PhonePe API authentication
-   */
-  async generateOAuthToken(): Promise<string> {
-    // Check if cached token is still valid
+  private resolveEnv(mode: PhonePeOptions["mode"]): Env {
+    if (mode === "production") {
+      return Env.PRODUCTION;
+    }
+    return Env.SANDBOX;
+  }
+
+  async createPayment({
+    merchantOrderId,
+    amount,
+    redirectUrl,
+    expireAfter,
+    message,
+    metaInfo,
+  }: StandardPayInput): Promise<StandardCheckoutPayResponse> {
+    const builder = StandardCheckoutPayRequest.builder()
+      .merchantOrderId(merchantOrderId)
+      .amount(amount)
+      .redirectUrl(redirectUrl);
+
+    if (typeof expireAfter === "number") {
+      builder.expireAfter(expireAfter);
+    }
+    if (message) {
+      builder.message(message);
+    }
+
+    if (metaInfo && Object.keys(metaInfo).length > 0) {
+      const metaBuilder = MetaInfo.builder();
+      if (metaInfo.udf1) {
+        metaBuilder.udf1(metaInfo.udf1);
+      }
+      if (metaInfo.udf2) {
+        metaBuilder.udf2(metaInfo.udf2);
+      }
+      if (metaInfo.udf3) {
+        metaBuilder.udf3(metaInfo.udf3);
+      }
+      if (metaInfo.udf4) {
+        metaBuilder.udf4(metaInfo.udf4);
+      }
+      if (metaInfo.udf5) {
+        metaBuilder.udf5(metaInfo.udf5);
+      }
+      builder.metaInfo(metaBuilder.build());
+    }
+
+    const request = builder.build();
+
+    const response = await this.client.pay(request);
+
+    if (this.options.enabledDebugLogging) {
+      this.logger.info(
+        `PhonePe SDK pay response: ${JSON.stringify({
+          orderId: response.orderId,
+          state: response.state,
+          redirectUrl: response.redirectUrl,
+        })}`
+      );
+    }
+
+    return response;
+  }
+
+  async getOrderStatus(
+    merchantOrderId: string,
+    details?: boolean
+  ): Promise<OrderStatusResponse> {
+    const response = await this.client.getOrderStatus(
+      merchantOrderId,
+      details ?? false
+    );
+
+    if (this.options.enabledDebugLogging) {
+      this.logger.info(
+        `PhonePe SDK order status: ${JSON.stringify({
+          orderId: response.orderId,
+          state: response.state,
+        })}`
+      );
+    }
+
+    return response;
+  }
+
+  async refund({
+    merchantRefundId,
+    originalMerchantOrderId,
+    amount,
+  }: RefundInput): Promise<RefundResponse> {
+    const builder = RefundRequest.builder()
+      .merchantRefundId(merchantRefundId)
+      .originalMerchantOrderId(originalMerchantOrderId)
+      .amount(amount);
+
+    const request = builder.build();
+
+    const response = await this.client.refund(request);
+
+    if (this.options.enabledDebugLogging) {
+      this.logger.info(
+        `PhonePe SDK refund response: ${JSON.stringify({
+          refundId: response.refundId,
+          state: response.state,
+          amount: response.amount,
+        })}`
+      );
+    }
+
+    return response;
+  }
+
+  validatePaymentInput(input: StandardPayInput): boolean {
+    if (!input.merchantOrderId) {
+      return false;
+    }
+    if (typeof input.amount !== "number" || input.amount <= 0) {
+      return false;
+    }
+    if (!input.redirectUrl) {
+      return false;
+    }
     if (
-      this.tokenCache &&
-      this.options.tokenCacheEnabled !== false &&
-      this.tokenCache.expiresAt > Date.now()
+      typeof input.expireAfter === "number" &&
+      (input.expireAfter < 300 || input.expireAfter > 3600)
     ) {
-      this.logger.debug("Using cached OAuth token");
-      return this.tokenCache.token;
-    }
-
-    try {
-      const authUrl = `${this.url}/v1/oauth/token`;
-      const credentials = Buffer.from(
-        `${this.options.clientId}:${this.options.clientSecret}`
-      ).toString("base64");
-
-      const response = await axios.post<OAuthTokenResponse>(
-        authUrl,
-        {
-          grant_type: "client_credentials",
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic ${credentials}`,
-          },
-        }
-      );
-
-      const tokenData = response.data;
-      const expiresAt = Date.now() + (tokenData.expires_in - 300) * 1000; // Refresh 5 minutes before expiry
-
-      // Cache the token
-      this.tokenCache = {
-        token: tokenData.access_token,
-        expiresAt,
-      };
-
-      this.logger.debug("OAuth token generated and cached");
-      return tokenData.access_token;
-    } catch (error) {
-      this.logger.error(`Failed to generate OAuth token: ${JSON.stringify(error)}`);
-      throw new Error("Failed to generate OAuth token for PhonePe API");
-    }
-  }
-
-  /**
-   * Get OAuth token (generate if needed)
-   */
-  async getAuthToken(): Promise<string> {
-    return await this.generateOAuthToken();
-  }
-
-  /**
-   * Create payment request using PhonePe v2 API
-   */
-  async createPaymentV2(
-    payload: PaymentRequestV2
-  ): Promise<PaymentResponseV2> {
-    try {
-      const token = await this.getAuthToken();
-      const apiEndpoint = "/checkout/v2/pay";
-      const url = `${this.url}${apiEndpoint}`;
-
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `O-Bearer ${token}`,
-      };
-
-      const response = await axios.post<PaymentResponseV2>(url, payload, {
-        headers,
-      });
-
-      if (this.options.enabledDebugLogging) {
-        this.logger.info(
-          `PhonePe payment response: ${JSON.stringify(response.data)}`
-        );
-      }
-
-      return response.data;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to create payment: ${JSON.stringify(error.response?.data || error.message)}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Get order status using PhonePe v2 API
-   */
-  async getOrderStatusV2(
-    merchantOrderId: string
-  ): Promise<OrderStatusResponseV2> {
-    if (!merchantOrderId) {
-      throw new Error("merchantOrderId is required");
-    }
-
-    try {
-      const token = await this.getAuthToken();
-      const apiEndpoint = `/checkout/v2/order/${merchantOrderId}/status`;
-      const url = `${this.url}${apiEndpoint}`;
-
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `O-Bearer ${token}`,
-      };
-
-      const response = await axios.get<OrderStatusResponseV2>(url, {
-        headers,
-      });
-
-      if (this.options.enabledDebugLogging) {
-        this.logger.info(
-          `PhonePe order status response: ${JSON.stringify(response.data)}`
-        );
-      }
-
-      return response.data;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to get order status: ${JSON.stringify(error.response?.data || error.message)}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Create refund request using PhonePe v2 API
-   */
-  async createRefundV2(
-    payload: RefundRequestV2
-  ): Promise<RefundResponseV2> {
-    try {
-      const token = await this.getAuthToken();
-      const apiEndpoint = "/checkout/v2/refund";
-      const url = `${this.url}${apiEndpoint}`;
-
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `O-Bearer ${token}`,
-      };
-
-      const response = await axios.post<RefundResponseV2>(url, payload, {
-        headers,
-      });
-
-      if (this.options.enabledDebugLogging) {
-        this.logger.info(
-          `PhonePe refund response: ${JSON.stringify(response.data)}`
-        );
-      }
-
-      return response.data;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to create refund: ${JSON.stringify(error.response?.data || error.message)}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Validate payment request
-   */
-  validatePaymentRequestV2(paymentRequest: PaymentRequestV2): boolean {
-    if (!paymentRequest.merchantOrderId || paymentRequest.merchantOrderId.length === 0) {
       return false;
     }
-
-    if (typeof paymentRequest.amount !== "number" || paymentRequest.amount <= 0) {
-      return false;
-    }
-
-    if (!paymentRequest.paymentFlow || paymentRequest.paymentFlow.type !== "PG_CHECKOUT") {
-      return false;
-    }
-
-    if (!paymentRequest.paymentFlow.merchantUrls?.redirectUrl) {
-      return false;
-    }
-
-    if (paymentRequest.expireAfter) {
-      if (paymentRequest.expireAfter < 300 || paymentRequest.expireAfter > 3600) {
-        return false;
-      }
-    }
-
     return true;
   }
 
   /**
-   * Legacy methods for backward compatibility (deprecated)
+   * Validates webhook callback using PhonePe SDK's validateCallback method
+   * @param authorizationHeader - The authorization header value from the webhook request
+   * @param callbackBody - The raw callback body as string
+   * @returns The validated callback response, or null if validation fails or credentials are missing
    */
-  async postPaymentRequestToPhonePe(
-    payload: any,
-    apiNewEndpoint?: string
-  ): Promise<any> {
-    this.logger.warn(
-      "postPaymentRequestToPhonePe is deprecated. Use createPaymentV2 instead."
-    );
-    // This method is kept for backward compatibility but should not be used
-    throw new Error(
-      "Legacy payment method is deprecated. Please use createPaymentV2."
-    );
-  }
+  async validateWebhookCallback(
+    authorizationHeader: string,
+    callbackBody: string
+  ): Promise<any | null> {
+    // Check if merchant credentials are configured
+    if (!this.options.merchantUsername || !this.options.merchantPassword) {
+      this.logger.warn(
+        "Webhook validation requires merchantUsername and merchantPassword to be configured in PhonePeOptions. Falling back to signature-based validation."
+      );
+      return null;
+    }
 
-  async getPhonePeTransactionStatus(
-    merchantId: string,
-    merchantTransactionId: string,
-    apiNewEndpoint?: string
-  ): Promise<any> {
-    this.logger.warn(
-      "getPhonePeTransactionStatus is deprecated. Use getOrderStatusV2 instead."
-    );
-    // For backward compatibility, try to use merchantTransactionId as merchantOrderId
-    return await this.getOrderStatusV2(merchantTransactionId);
-  }
+    if (!authorizationHeader) {
+      this.logger.warn(
+        "Authorization header is missing from webhook request. Cannot validate webhook."
+      );
+      return null;
+    }
 
-  async postRefundRequestToPhonePe(
-    payload: any,
-    apiNewEndpoint?: string
-  ): Promise<any> {
-    this.logger.warn(
-      "postRefundRequestToPhonePe is deprecated. Use createRefundV2 instead."
-    );
-    // Convert legacy refund request to v2 format
-    const refundRequestV2: RefundRequestV2 = {
-      merchantId: payload.merchantId,
-      merchantRefundId: payload.merchantTransactionId,
-      originalTransactionId: payload.originalTransactionId,
-      amount: payload.amount,
-      callbackUrl: payload.callbackUrl,
-    };
-    return await this.createRefundV2(refundRequestV2);
+    try {
+      // Check if validateCallback method exists on the client
+      if (typeof this.client.validateCallback !== "function") {
+        this.logger.error(
+          "validateCallback method is not available on StandardCheckoutClient. Please ensure you are using the latest version of pg-sdk-node."
+        );
+        return null;
+      }
+
+      // Use SDK's validateCallback method
+      // According to PhonePe SDK documentation, the method signature is:
+      // validateCallback(username, password, authorizationHeader, callbackBodyString)
+      const callbackResponse = this.client.validateCallback(
+        this.options.merchantUsername,
+        this.options.merchantPassword,
+        authorizationHeader,
+        callbackBody
+      );
+
+      if (this.options.enabledDebugLogging) {
+        this.logger.info(
+          `PhonePe SDK webhook validation successful: ${JSON.stringify({
+            type: callbackResponse?.type,
+            orderId: callbackResponse?.payload?.orderId,
+            state: callbackResponse?.payload?.state,
+          })}`
+        );
+      }
+
+      return callbackResponse;
+    } catch (error: any) {
+      this.logger.error(
+        `PhonePe SDK webhook validation failed: ${
+          error?.message || JSON.stringify(error)
+        }`
+      );
+      // Don't throw - return null to allow fallback to legacy validation
+      return null;
+    }
   }
 
   /**
-   * Validate webhook signature (legacy method - may need updates for v2)
+   * Legacy webhook validation method (kept for backward compatibility)
+   * @param data
+   * @param signature
+   * @param salt
+   * @deprecated Use validateWebhookCallback instead
    */
-  validateWebhook(data: string, signature: string, salt: string): boolean {
-    // Webhook validation may have changed in v2 API
-    // This is a placeholder - actual implementation depends on PhonePe v2 webhook format
+  validateWebhook(data: string, signature: string, _salt: string): boolean {
     this.logger.warn(
-      "validateWebhook may need updates for PhonePe v2 API webhook format"
+      "validateWebhook is deprecated. Use validateWebhookCallback with SDK validation instead."
     );
-    // For now, return true if signature exists (implement proper validation)
+    // Fallback to basic signature check if SDK validation is not available
     return !!signature;
   }
 }

@@ -1,6 +1,6 @@
-import { defineConfig } from "vite";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { defineConfig } from "vitest/config";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import dts from "vite-plugin-dts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,8 +17,8 @@ export default defineConfig({
         "src/**/__fixtures__/**",
       ],
       outDir: "dist",
-      rollupTypes: true,
       copyDtsFiles: true,
+      tsconfigPath: resolve(__dirname, "tsconfig.json"),
     }),
   ],
   build: {
@@ -30,17 +30,6 @@ export default defineConfig({
     },
     outDir: "dist",
     sourcemap: true,
-    minify: "terser",
-    terserOptions: {
-      compress: {
-        drop_console: false, // Keep console logs for debugging
-        drop_debugger: true,
-        passes: 2, // Multiple passes for better minification
-      },
-      format: {
-        comments: false, // Remove comments
-      },
-    },
     rollupOptions: {
       output: {
         // Preserve directory structure for proper module resolution
@@ -101,12 +90,19 @@ export default defineConfig({
     commonjsOptions: {
       transformMixedEsModules: true,
     },
-    // Optimize chunk size
-    chunkSizeWarningLimit: 1000,
   },
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
     },
+  },
+  test: {
+    environment: "node",
+    include: ["**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+    globals: false,
+    sequence: {
+      hooks: "list",
+    },
+    testTimeout: 1000000000, // 1e9 milliseconds to match jest.setTimeout(1e9)
   },
 });

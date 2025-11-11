@@ -1,6 +1,10 @@
-import PhonePeBase from "../core/phonepe-base";
-import { PaymentIntentOptions, PaymentProviderKeys, PhonePeOptions } from "../types";
-import { Logger } from "@medusajs/framework/utils";
+import PhonePeBase from "../core/phonepe-base.js";
+import {
+  PaymentIntentOptions,
+  PaymentProviderKeys,
+  PhonePeOptions,
+} from "../types.js";
+import { Logger } from "@medusajs/framework/types";
 
 class PhonePeProviderService extends PhonePeBase {
   static identifier = PaymentProviderKeys.PHONEPE;

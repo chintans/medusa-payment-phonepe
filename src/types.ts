@@ -1,5 +1,3 @@
-import { PaymentProviderError } from "@medusajs/framework/types";
-
 export interface PhonePeOptions {
   enabledDebugLogging?: boolean;
   redirectUrl: string;
@@ -10,7 +8,12 @@ export interface PhonePeOptions {
   // OAuth configuration for PhonePe v2 API
   clientId: string;
   clientSecret: string;
+  clientVersion: number;
   tokenCacheEnabled?: boolean;
+  shouldPublishEvents?: boolean;
+  // Webhook validation credentials (required for SDK webhook validation)
+  merchantUsername?: string;
+  merchantPassword?: string;
   // Legacy options (kept for backward compatibility during migration)
   redirectMode?: "REDIRECT" | "POST";
   capture?: boolean;
@@ -429,7 +432,7 @@ export interface PhonePeEvent {
   event: string; // checkout.order.completed, checkout.order.failed, pg.refund.completed, pg.refund.failed
   id: string;
   data: {
-    object: PhonePeS2SResponse | PaymentProviderError;
+    object: PhonePeS2SResponse;
   };
 }
 

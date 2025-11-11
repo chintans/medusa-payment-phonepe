@@ -23,7 +23,11 @@ export const initiatePaymentContextWithExistingCustomer: InitiatePaymentInput =
     amount: 1000,
     currency_code: "inr",
     context: {
-      customer: { phone: "9999999999", id: "thisIsATestUser", email: EXISTING_CUSTOMER_EMAIL } as Customer,
+      customer: {
+        phone: "9999999999",
+        id: "thisIsATestUser",
+        email: EXISTING_CUSTOMER_EMAIL,
+      } as Customer,
     },
     data: {
       resource_id: "test",
@@ -31,23 +35,24 @@ export const initiatePaymentContextWithExistingCustomer: InitiatePaymentInput =
     },
   };
 
-export const initiatePaymentContextWithExistingCustomerPhonePeId: InitiatePaymentInput = {
-  amount: 1000,
-  currency_code: "usd",
-  context: {
-    customer: {
+export const initiatePaymentContextWithExistingCustomerPhonePeId: InitiatePaymentInput =
+  {
+    amount: 1000,
+    currency_code: "usd",
+    context: {
+      customer: {
+        id: "test",
+        email: EXISTING_CUSTOMER_EMAIL,
+        metadata: {
+          phonepe_id: "test",
+        },
+      } as Customer,
+    },
+    data: {
+      resource_id: "test",
       id: "test",
-      email: EXISTING_CUSTOMER_EMAIL,
-      metadata: {
-        phonepe_id: "test",
-      },
-    } as Customer,
-  },
-  data: {
-    resource_id: "test",
-    id: "test",
-  },
-};
+    },
+  };
 
 export const initiatePaymentContextWithWrongEmail: InitiatePaymentInput = {
   amount: 1000,
@@ -64,21 +69,22 @@ export const initiatePaymentContextWithWrongEmail: InitiatePaymentInput = {
   },
 };
 
-export const initiatePaymentContextWithFailIntentCreation: InitiatePaymentInput = {
-  amount: 1000,
-  currency_code: "usd",
-  context: {
-    customer: {
+export const initiatePaymentContextWithFailIntentCreation: InitiatePaymentInput =
+  {
+    amount: 1000,
+    currency_code: "usd",
+    context: {
+      customer: {
+        id: "test",
+        email: EXISTING_CUSTOMER_EMAIL,
+      } as Customer,
+      payment_description: "fail",
+    },
+    data: {
+      resource_id: "test",
       id: "test",
-      email: EXISTING_CUSTOMER_EMAIL,
-    } as Customer,
-    payment_description: "fail",
-  },
-  data: {
-    resource_id: "test",
-    id: "test",
-  },
-};
+    },
+  };
 
 // AUTHORIZE PAYMENT DATA
 
@@ -217,7 +223,11 @@ export const updatePaymentContextWithDifferentAmount: UpdatePaymentInput = {
   amount: 300,
   currency_code: "usd",
   context: {
-    customer: { phone: "9999999999", id: "thisIsATestUser", email: EXISTING_CUSTOMER_EMAIL } as Customer,
+    customer: {
+      phone: "9999999999",
+      id: "thisIsATestUser",
+      email: EXISTING_CUSTOMER_EMAIL,
+    } as Customer,
   },
   data: {
     resource_id: "test",

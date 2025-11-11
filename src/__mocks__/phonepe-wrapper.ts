@@ -1,90 +1,85 @@
-import { PaymentSessionStatus } from "@medusajs/framework/types";
-import {
-  OrderStatusResponseV2,
-  PaymentRequestV2,
-  PaymentResponseV2,
-  RefundRequestV2,
-  RefundResponseV2,
-} from "../types";
+import { StandardPayInput, RefundInput } from "../core/phonepe-wrapper";
+
+type MockCallbackPayload = {
+  orderId: string;
+  merchantOrderId: string;
+  merchantTransactionId?: string;
+  state: string;
+  amount: number;
+};
 
 export class MockPhonePeWrapper {
-  async generateOAuthToken(): Promise<string> {
-    return "mock-access-token";
-  }
-
-  async getAuthToken(): Promise<string> {
-    return "mock-access-token";
-  }
-
-  async createPaymentV2(
-    payload: PaymentRequestV2
-  ): Promise<PaymentResponseV2> {
+  async createPayment(payload: StandardPayInput) {
     return {
-      code: "SUCCESS",
-      message: "Payment initiated successfully",
-      data: {
-        merchantId: payload.merchantId,
-        merchantTransactionId: payload.merchantTransactionId,
-        merchantOrderId: payload.merchantOrderId,
-        instrumentResponse: {
-          type: "PG_CHECKOUT",
-          redirectInfo: {
-            url: "https://merchant.phonepe.com/checkout?token=mock-token",
-            method: "GET",
-          },
+      orderId: `order_${payload.merchantOrderId}`,
+      state: "SUCCESS",
+      expireAt: Date.now() + 1800,
+      redirectUrl: "https://merchant.phonepe.com/checkout?token=mock-token",
+    };
+  }
+
+  async getOrderStatus(merchantOrderId: string) {
+    return {
+      orderId: `order_${merchantOrderId}`,
+      merchantOrderId,
+      merchantId: "test",
+      amount: 100,
+      state: "COMPLETED",
+      paymentDetails: [
+        {
+          state: "COMPLETED",
         },
-      },
+      ],
     };
   }
 
-  async getOrderStatusV2(
-    merchantOrderId: string
-  ): Promise<OrderStatusResponseV2> {
+  async refund(payload: RefundInput) {
     return {
-      code: "SUCCESS",
-      message: "Order retrieved successfully",
-      data: {
-        merchantId: "test",
-        merchantOrderId: merchantOrderId,
-        merchantTransactionId: merchantOrderId,
-        transactionId: `txn_${merchantOrderId}`,
-        amount: 100000,
-        state: "SUCCESS",
-        responseCode: "SUCCESS",
-        paymentInstrument: {
-          type: "UPI",
+      refundId: payload.merchantRefundId,
+      amount: payload.amount,
+      state: "SUCCESS",
+    };
+  }
+
+  async validateWebhookCallback(
+    authorizationHeader: string,
+    callbackBody: string
+  ): Promise<{ type: string; payload: MockCallbackPayload } | null> {
+    if (!authorizationHeader) {
+      return null;
+    }
+
+    try {
+      const parsedBody = JSON.parse(callbackBody);
+      return {
+        type: parsedBody.type || "PG_ORDER_COMPLETED",
+        payload: parsedBody.payload || {
+          orderId: "mock_order_id",
+          merchantOrderId: "mock_merchant_order_id",
+          merchantTransactionId: "mock_merchant_transaction_id",
+          state: "COMPLETED",
+          amount: 100,
         },
-      },
-    };
+      };
+    } catch {
+      return {
+        type: "PG_ORDER_COMPLETED",
+        payload: {
+          orderId: "mock_order_id",
+          merchantOrderId: "mock_merchant_order_id",
+          merchantTransactionId: "mock_merchant_transaction_id",
+          state: "COMPLETED",
+          amount: 100,
+        },
+      };
+    }
   }
 
-  async createRefundV2(payload: RefundRequestV2): Promise<RefundResponseV2> {
-    return {
-      code: "SUCCESS",
-      message: "Refund initiated successfully",
-      data: {
-        merchantId: payload.merchantId,
-        merchantRefundId: payload.merchantRefundId,
-        transactionId: `refund_txn_${payload.merchantRefundId}`,
-        amount: payload.amount,
-        state: "SUCCESS",
-        responseCode: "SUCCESS",
-      },
-    };
-  }
-
-  validateWebhook(data: string, signature: string, salt: string): boolean {
-    // Mock validation - return true for tests
+  validateWebhook(): boolean {
     return true;
   }
 
-  validatePaymentRequestV2(payload: PaymentRequestV2): boolean {
-    return !!(
-      payload.merchantId &&
-      payload.merchantOrderId &&
-      payload.amount &&
-      payload.paymentFlow
-    );
+  validatePaymentInput(payload: StandardPayInput): boolean {
+    return !!(payload.merchantOrderId && payload.amount && payload.redirectUrl);
   }
 }
-

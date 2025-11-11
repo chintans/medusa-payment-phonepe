@@ -1,15 +1,12 @@
 {
   "compilerOptions": {
-    "lib": [
-      "es2020",
-      "esnext"
-    ],
-    "target": "es2020",
+    "lib": ["es2022", "esnext"],
+    "target": "es2022",
     "outDir": "./dist",
     "esModuleInterop": true,
     "declaration": true,
-    "module": "Node16",
-    "moduleResolution": "Node16",
+    "module": "node20",
+    "moduleResolution": "NodeNext",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "sourceMap": true,

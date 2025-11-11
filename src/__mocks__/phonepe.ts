@@ -1,14 +1,6 @@
 import { PaymentIntentDataByStatus } from "../__fixtures__/data";
 import { ErrorCodes, ErrorIntentStatus } from "../types";
-import {
-  describe,
-  beforeEach,
-  afterEach,
-  beforeAll,
-  expect,
-  jest,
-  it,
-} from "@jest/globals";
+import { vi } from "vitest";
 export const WRONG_CUSTOMER_EMAIL = "wrong@test.fr";
 export const EXISTING_CUSTOMER_EMAIL = "right@test.fr";
 export const PHONEPE_ID = "test";
@@ -20,6 +12,9 @@ dotenv.config();
 
 const mockEnabled = process.env.DISABLE_MOCKS == "true" ? false : true;
 
+/**
+ *
+ */
 export function isMocksEnabled(): boolean {
   if (mockEnabled) {
     console.log("using mocks");
@@ -29,7 +24,7 @@ export function isMocksEnabled(): boolean {
 
 export const PhonePeMock = {
   paymentIntents: {
-    retrieve: jest.fn().mockImplementation(async (paymentId) => {
+    retrieve: vi.fn().mockImplementation(async (paymentId) => {
       if (paymentId === FAIL_INTENT_ID) {
         throw new Error("Error");
       }
@@ -40,7 +35,7 @@ export const PhonePeMock = {
         }) ?? {}
       );
     }),
-    update: jest.fn().mockImplementation(async (paymentId, updateData: any) => {
+    update: vi.fn().mockImplementation(async (paymentId, updateData: any) => {
       if (paymentId === FAIL_INTENT_ID) {
         throw new Error("Error");
       }
@@ -52,14 +47,14 @@ export const PhonePeMock = {
 
       return { ...data, ...updateData };
     }),
-    create: jest.fn().mockImplementation(async (data: any) => {
+    create: vi.fn().mockImplementation(async (data: any) => {
       if (data.description === "fail") {
         throw new Error("Error");
       }
 
       return data;
     }),
-    cancel: jest.fn().mockImplementation(async (paymentId) => {
+    cancel: vi.fn().mockImplementation(async (paymentId) => {
       if (paymentId === FAIL_INTENT_ID) {
         throw new Error("Error");
       }
@@ -79,7 +74,7 @@ export const PhonePeMock = {
 
       return { id: paymentId };
     }),
-    capture: jest.fn().mockImplementation(async (paymentId) => {
+    capture: vi.fn().mockImplementation(async (paymentId) => {
       if (paymentId === FAIL_INTENT_ID) {
         throw new Error("Error");
       }
@@ -101,7 +96,7 @@ export const PhonePeMock = {
     }),
   },
   refunds: {
-    create: jest
+    create: vi
       .fn()
       .mockImplementation(async ({ payment_intent: paymentId }: any) => {
         if (paymentId === FAIL_INTENT_ID) {
@@ -112,7 +107,7 @@ export const PhonePeMock = {
       }),
   },
   customers: {
-    create: jest.fn().mockImplementation(async (data: any) => {
+    create: vi.fn().mockImplementation(async (data: any) => {
       if (data.email === EXISTING_CUSTOMER_EMAIL) {
         return { id: PHONEPE_ID, ...data };
       }
@@ -122,6 +117,6 @@ export const PhonePeMock = {
   },
 };
 
-const phonepe = jest.fn(() => PhonePeMock);
+const phonepe = vi.fn(() => PhonePeMock);
 
 export default phonepe;
