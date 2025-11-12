@@ -1,6 +1,6 @@
 {
 	"name": "@promactinfo/medusa-payment-phonepe",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"description": "PhonePe payment provider for Medusa Commerce",
 	"private": false,
 	"main": "dist/index.js",
