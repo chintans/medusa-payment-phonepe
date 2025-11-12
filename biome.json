@@ -1,0 +1,125 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!!**/dist"] },
+  "formatter": { "enabled": true, "indentStyle": "tab" },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "complexity": {
+        "noAdjacentSpacesInRegex": "error",
+        "noArguments": "error",
+        "noExtraBooleanCast": "error",
+        "noUselessCatch": "error",
+        "noUselessEscapeInRegex": "error"
+      },
+      "correctness": {
+        "noConstAssign": "error",
+        "noConstantCondition": "error",
+        "noEmptyCharacterClassInRegex": "error",
+        "noEmptyPattern": "error",
+        "noGlobalObjectCalls": "error",
+        "noInvalidBuiltinInstantiation": "error",
+        "noInvalidConstructorSuper": "error",
+        "noNonoctalDecimalEscape": "error",
+        "noPrecisionLoss": "error",
+        "noSelfAssign": "error",
+        "noSetterReturn": "error",
+        "noSwitchDeclarations": "error",
+        "noUndeclaredVariables": "error",
+        "noUnreachable": "error",
+        "noUnreachableSuper": "error",
+        "noUnsafeFinally": "error",
+        "noUnsafeOptionalChaining": "error",
+        "noUnusedLabels": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noUnusedVariables": "error",
+        "useIsNan": "error",
+        "useValidForDirection": "error",
+        "useValidTypeof": "error",
+        "useYield": "error"
+      },
+      "style": {
+        "useArrayLiterals": "error",
+        "useBlockStatements": "error",
+        "useConsistentBuiltinInstantiation": "error",
+        "useConst": "error",
+        "useSingleVarDeclarator": "error"
+      },
+      "suspicious": {
+        "noAsyncPromiseExecutor": "error",
+        "noCatchAssign": "error",
+        "noClassAssign": "error",
+        "noCompareNegZero": "error",
+        "noConstantBinaryExpressions": "error",
+        "noControlCharactersInRegex": "error",
+        "noDebugger": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateClassMembers": "error",
+        "noDuplicateElseIf": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noEmptyBlockStatements": "error",
+        "noFallthroughSwitchClause": "error",
+        "noFunctionAssign": "error",
+        "noGlobalAssign": "error",
+        "noImportAssign": "error",
+        "noIrregularWhitespace": "error",
+        "noMisleadingCharacterClass": "error",
+        "noPrototypeBuiltins": "error",
+        "noRedeclare": "error",
+        "noShadowRestrictedNames": "error",
+        "noSparseArray": "error",
+        "noUnsafeNegation": "error",
+        "noUselessRegexBackrefs": "error",
+        "noVar": "error",
+        "noWith": "error",
+        "useGetterReturn": "error",
+        "useGuardForIn": "error"
+      }
+    },
+    "includes": [
+      "**",
+      "!**/models",
+      "!**/repositories",
+      "!**/reports",
+      "!**/dist",
+      "!**/coverage"
+    ]
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "double" },
+    "globals": ["exports"]
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.ts"],
+      "javascript": { "globals": ["exports"] },
+      "linter": {
+        "rules": {
+          "correctness": { "noUnusedVariables": "error" },
+          "style": { "noNonNullAssertion": "off" }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/common/**/*.ts",
+        "**/bin/**/*.ts",
+        "**/api/**/*.ts",
+        "**/medusa-js/**/resources/**/*.ts"
+      ],
+      "linter": { "rules": {} }
+    },
+    {
+      "includes": ["**/__mocks__/**/*.ts"],
+      "linter": { "rules": { "correctness": { "noUnusedVariables": "off" } } }
+    },
+    { "includes": ["**/api/**/*.ts"], "linter": { "rules": {} } }
+  ],
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  }
+}

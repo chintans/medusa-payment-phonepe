@@ -2,14 +2,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FlatCompat } from "@eslint/eslintrc";
-import { defineConfig } from "eslint/config";
 import js from "@eslint/js";
-import globals from "globals";
-import fileProgressPlugin from "eslint-plugin-file-progress";
-import prettierPlugin from "eslint-plugin-prettier";
-import jsdocPlugin from "eslint-plugin-jsdoc";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import { defineConfig } from "eslint/config";
+import fileProgressPlugin from "eslint-plugin-file-progress";
+import jsdocPlugin from "eslint-plugin-jsdoc";
+import prettierPlugin from "eslint-plugin-prettier";
+import globals from "globals";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,10 +29,7 @@ const jsdocBaseSettings = jsdocRecommended.settings?.jsdoc ?? {};
 
 const stripLegacyRules = (configs) =>
   configs.map((config) => {
-    if (
-      config.rules &&
-      Object.prototype.hasOwnProperty.call(config.rules, "valid-jsdoc")
-    ) {
+    if (config.rules && Object.hasOwn(config.rules, "valid-jsdoc")) {
       const nextRules = { ...config.rules };
       delete nextRules["valid-jsdoc"];
 

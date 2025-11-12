@@ -1,19 +1,19 @@
 import {
+  AuthorizePaymentInput,
+  CapturePaymentInput,
+  Customer,
+  InitiatePaymentInput,
+  RefundPaymentInput,
+  UpdatePaymentInput,
+} from "@medusajs/framework/types";
+import { PaymentIntentDataByStatus } from "../../__fixtures__/data";
+import {
   EXISTING_CUSTOMER_EMAIL,
   FAIL_INTENT_ID,
   PARTIALLY_FAIL_INTENT_ID,
   PHONEPE_ID,
   WRONG_CUSTOMER_EMAIL,
 } from "../../__mocks__/phonepe";
-import { PaymentIntentDataByStatus } from "../../__fixtures__/data";
-import {
-  InitiatePaymentInput,
-  AuthorizePaymentInput,
-  CapturePaymentInput,
-  RefundPaymentInput,
-  UpdatePaymentInput,
-  Customer,
-} from "@medusajs/framework/types";
 import { PaymentStatusCodeValues, PhonePeS2SResponse } from "../../types";
 
 // INITIATE PAYMENT DATA

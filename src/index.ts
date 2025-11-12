@@ -7,6 +7,6 @@ export default ModuleProvider(Modules.PAYMENT, {
   services,
 });
 
-export * from "./types.js";
 export * from "./core/phonepe-base.js";
 export * from "./services/phonepe-provider.js";
+export * from "./types.js";

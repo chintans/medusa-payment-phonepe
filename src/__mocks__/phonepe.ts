@@ -1,11 +1,12 @@
+import { vi } from "vitest";
 import { PaymentIntentDataByStatus } from "../__fixtures__/data";
 import { ErrorCodes, ErrorIntentStatus } from "../types";
-import { vi } from "vitest";
 export const WRONG_CUSTOMER_EMAIL = "wrong@test.fr";
 export const EXISTING_CUSTOMER_EMAIL = "right@test.fr";
 export const PHONEPE_ID = "test";
 export const PARTIALLY_FAIL_INTENT_ID = "partially_unknown";
 export const FAIL_INTENT_ID = "unknown";
+
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -80,7 +81,7 @@ export const PhonePeMock = {
       }
 
       if (paymentId === PARTIALLY_FAIL_INTENT_ID) {
-        throw Error(
+        throw new Error(
           JSON.stringify({
             code: ErrorCodes.PAYMENT_INTENT_UNEXPECTED_STATE,
             payment_intent: {

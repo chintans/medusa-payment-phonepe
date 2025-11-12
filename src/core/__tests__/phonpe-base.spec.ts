@@ -1,11 +1,11 @@
 import {
-  vi,
-  describe,
-  it,
-  expect,
+  afterEach,
   beforeAll,
   beforeEach,
-  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
 } from "vitest";
 
 // Mock PhonePeWrapper when mocks are enabled - must be before imports
@@ -22,14 +22,16 @@ vi.mock("../phonepe-wrapper", async () => {
   return vi.importActual("../phonepe-wrapper");
 });
 
-import { PhonePeTest } from "../__fixtures__/phonepe-test";
 import {
   AuthorizePaymentInput,
   CapturePaymentInput,
   RefundPaymentInput,
   UpdatePaymentInput,
 } from "@medusajs/framework/types";
+import { PaymentSessionStatus } from "@medusajs/framework/utils";
 import dotenv from "dotenv";
+import { isMocksEnabled } from "../../__mocks__/phonepe";
+import { PhonePeOptions } from "../../types";
 import {
   authorizePaymentSuccessData,
   capturePaymentContextSuccessData,
@@ -38,9 +40,8 @@ import {
   responseHookData,
   updatePaymentContextWithDifferentAmount,
 } from "../__fixtures__/data";
-import { isMocksEnabled } from "../../__mocks__/phonepe";
-import { PhonePeOptions } from "../../types";
-import { PaymentSessionStatus } from "@medusajs/framework/utils";
+import { PhonePeTest } from "../__fixtures__/phonepe-test";
+
 let config: PhonePeOptions = {
   salt: "test",
   merchantId: "test",

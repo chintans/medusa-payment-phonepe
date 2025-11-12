@@ -1,4 +1,4 @@
-import { StandardPayInput, RefundInput } from "../core/phonepe-wrapper";
+import { RefundInput, StandardPayInput } from "../core/phonepe-wrapper";
 
 type MockCallbackPayload = {
   orderId: string;

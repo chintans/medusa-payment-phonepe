@@ -7,9 +7,16 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./package.json": "./package.json",
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
   },
   "type": "module",
@@ -32,10 +39,13 @@
   "scripts": {
     "prepare": "husky && cross-env NODE_ENV=production pnpm run build",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "postbuild": "pnpm run check:exports",
     "build": "vite build",
+    "check:exports": "attw --pack .",
     "build:watch": "vite build --watch",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
     "prepublishOnly": "pnpm run lint && pnpm run test && pnpm run build && pnpm run build:types",
     "release": "standard-version",
@@ -44,14 +54,12 @@
     "release:first": "standard-version --first-release"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.3.5",
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
+    "@eslint/js": "^9.39.1",
     "@medusajs/framework": "^2.0.0",
     "@types/express": "^4.17.17",
-    "@typescript-eslint/eslint-plugin": "^8.46.3",
-    "@typescript-eslint/parser": "^8.46.3",
-    "@eslint/eslintrc": "^3.3.1",
-    "@eslint/js": "^9.39.1",
     "awilix": "^12.0.5",
     "axios": "^1.13.2",
     "axios-mock-adapter": "^2.1.0",
@@ -59,12 +67,6 @@
     "cross-env": "^10.0.0",
     "crypto-js": "^4.1.1",
     "dotenv": "^17.0.0",
-    "eslint": "^9.39.1",
-    "eslint-config-google": "^0.14.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-file-progress": "^3.0.2",
-    "eslint-plugin-jsdoc": "^61.1.12",
-    "eslint-plugin-prettier": "^5.5.4",
     "express": "^4.17.1",
     "globals": "^15.11.0",
     "husky": "^9.0.0",
@@ -85,6 +87,7 @@
     "typeorm": "^0.3.20"
   },
   "dependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
     "crypto-js": "^4.1.1",
     "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node.tgz",
     "ts-retry": "^4.2.1"
