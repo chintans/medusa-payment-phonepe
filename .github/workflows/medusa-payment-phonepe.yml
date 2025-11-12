@@ -63,6 +63,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
+      id-token: write
     env:
       PHONEPE_WEBHOOK_USERNAME: ${{ vars.PHONEPE_WEBHOOK_USERNAME }}
       PHONEPE_WEBHOOK_PASSWORD: ${{ vars.PHONEPE_WEBHOOK_PASSWORD }}

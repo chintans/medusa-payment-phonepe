@@ -9,6 +9,7 @@
  * Step 6. Refund
  */
 
+import { randomUUID } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import type { Logger } from "@medusajs/framework/types";
 import {
@@ -45,7 +46,6 @@ import {
 	PaymentStatusCodeValues,
 	PhonePeEvent,
 	PhonePeOptions,
-	PhonePeS2SResponse,
 } from "../types.js";
 import {
 	PhonePeWrapper,
@@ -69,12 +69,20 @@ export type TransactionIdentifier = {
 
 abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 	static readonly identifier: string = "";
-	static sequenceCount: number = 0;
+	static readonly STATUS_CACHE_TTL_MS = 5_000;
 
 	protected readonly options_: PhonePeOptions;
 	protected phonepe_: PhonePeWrapper;
 	protected logger: Logger;
 	protected container_: Record<string, unknown>;
+	private readonly statusCache = new Map<
+		string,
+		{ data: OrderStatusResponse; expiresAt: number }
+	>();
+	private readonly inFlightStatusRequests = new Map<
+		string,
+		Promise<OrderStatusResponse>
+	>();
 
 	static validateOptions(options: PhonePeOptions): void {
 		if (!isDefined(options.clientId)) {
@@ -103,24 +111,21 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		container: { logger: Logger } & Record<string, unknown>,
 		options: PhonePeOptions,
 	) {
+		PhonePeBase.validateOptions(options);
 		super(container, options);
 
 		this.container_ = container;
 		this.logger = container.logger;
-		this.options_ = options;
+		this.options_ = { ...options };
 		this.init();
 	}
 
 	protected init(): void {
-		this.phonepe_ =
-			this.phonepe_ ||
-			new PhonePeWrapper(
-				{
-					...this.options_,
-					callbackUrl: this.options_.callbackUrl ?? "http://localhost:9000",
-				},
-				this.logger,
-			);
+		if (!this.phonepe_) {
+			this.ensureValidUrl(this.options_.redirectUrl, "redirectUrl");
+			this.ensureValidUrl(this.options_.callbackUrl, "callbackUrl");
+			this.phonepe_ = new PhonePeWrapper({ ...this.options_ }, this.logger);
+		}
 	}
 
 	abstract get paymentIntentOptions(): PaymentIntentOptions;
@@ -180,37 +185,30 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		apiCall: () => Promise<T>,
 		maxRetries: number = 3,
 		baseDelay: number = 1000,
-		currentAttempt: number = 1,
 	): Promise<T | PhonePeErrorData> {
-		try {
-			return await apiCall();
-		} catch (error) {
-			const handledError = this.handlePhonePeError(error);
+		let attempt = 1;
+		for (;;) {
+			try {
+				return await apiCall();
+			} catch (error) {
+				const handledError = this.handlePhonePeError(error);
 
-			if (!handledError.retry) {
-				// If retry is false, we know data exists per the type definition
-				return handledError.data;
-			}
+				if (!handledError.retry) {
+					return handledError.data;
+				}
 
-			if (handledError.retry && currentAttempt <= maxRetries) {
-				// Exponential backoff with jitter
+				if (attempt >= maxRetries) {
+					throw this.buildError(
+						"An error occurred during PhonePe API call",
+						error as Error,
+					);
+				}
+
 				const delay =
-					baseDelay *
-					Math.pow(2, currentAttempt - 1) *
-					(0.5 + Math.random() * 0.5);
+					baseDelay * Math.pow(2, attempt - 1) * (0.5 + Math.random() * 0.5);
 				await setTimeout(delay);
-				return this.executeWithRetry(
-					apiCall,
-					maxRetries,
-					baseDelay,
-					currentAttempt + 1,
-				);
+				attempt++;
 			}
-			// Retries are exhausted
-			throw this.buildError(
-				"An error occurred during PhonePe API call",
-				error as Error,
-			);
 		}
 	}
 
@@ -252,23 +250,56 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		}
 	}
 
+	private async getOrderStatusWithCache(
+		merchantOrderId: string,
+		withDetails: boolean = true,
+	): Promise<OrderStatusResponse> {
+		const cacheEntry = this.statusCache.get(merchantOrderId);
+		const now = Date.now();
+
+		if (cacheEntry && cacheEntry.expiresAt > now) {
+			return cacheEntry.data;
+		} else if (cacheEntry && cacheEntry.expiresAt <= now) {
+			this.statusCache.delete(merchantOrderId);
+		}
+
+		const inFlightKey = `${merchantOrderId}:${withDetails}`;
+		const existingRequest = this.inFlightStatusRequests.get(inFlightKey);
+		if (existingRequest) {
+			return existingRequest;
+		}
+
+		const request = this.phonepe_
+			.getOrderStatus(merchantOrderId, withDetails)
+			.then((response) => {
+				this.statusCache.set(merchantOrderId, {
+					data: response,
+					expiresAt: Date.now() + PhonePeBase.STATUS_CACHE_TTL_MS,
+				});
+				return response;
+			})
+			.finally(() => {
+				this.inFlightStatusRequests.delete(inFlightKey);
+			});
+
+		this.inFlightStatusRequests.set(inFlightKey, request);
+		return request;
+	}
+
 	async getPaymentStatus(
 		input: GetPaymentStatusInput,
 	): Promise<GetPaymentStatusOutput> {
-		const id = input?.data?.id as string;
-		const merchantOrderId = (input?.data?.merchantOrderId ||
-			input?.data?.merchantTransactionId ||
-			id) as string;
-
-		if (!merchantOrderId || typeof merchantOrderId !== "string") {
-			throw this.buildError(
-				"No merchant order ID provided while getting payment status",
-				new Error("No merchant order ID provided"),
-			);
-		}
-
 		try {
-			const orderStatus = await this.phonepe_.getOrderStatus(
+			const merchantOrderId = this.resolveMerchantOrderId(
+				[
+					input?.data?.merchantOrderId,
+					input?.data?.merchantTransactionId,
+					input?.data?.id,
+				],
+				"get payment status",
+			);
+
+			const orderStatus = await this.getOrderStatusWithCache(
 				merchantOrderId,
 				true,
 			);
@@ -276,6 +307,13 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 
 			return statusResponse as unknown as GetPaymentStatusOutput;
 		} catch (error) {
+			// Preserve validation errors without wrapping
+			if (
+				error instanceof Error &&
+				error.message.includes("No merchant order ID provided")
+			) {
+				throw error;
+			}
 			throw this.buildError(
 				"An error occurred while getting payment status",
 				error as Error,
@@ -291,37 +329,35 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 	}: InitiatePaymentInput): Promise<InitiatePaymentOutput> {
 		try {
 			const customer = context?.customer;
-			const resourceId = (data?.resource_id || data?.id || "") as string;
+			const resourceId = this.normalizeResourceId(
+				(data?.resource_id || data?.id) as string | undefined,
+			);
+			const merchantOrderId = this.createMerchantOrderId(resourceId);
+			const normalizedAmount = this.normalizeAmount(amount, "amount");
 
-			PhonePeBase.sequenceCount++;
-			const merchantOrderId = `${resourceId}_${PhonePeBase.sequenceCount}`;
-
-			const amountNumber = typeof amount === "number" ? amount : Number(amount);
 			const paymentRequest: StandardPayInput = {
 				merchantOrderId,
-				amount: Number(amountNumber.toFixed(2)),
+				amount: normalizedAmount,
 				expireAfter: 1800, // 30 minutes default
 				redirectUrl: this.options_.redirectUrl,
 				message: this.options_.payment_description || "Payment for your order",
-				metaInfo: {
-					udf1: customer?.id || "",
-					udf2: customer?.email || "",
+				metaInfo: this.compactMetaInfo({
+					udf1: this.sanitizeMetaValue(customer?.id),
+					udf2: this.sanitizeMetaValue(customer?.email),
 					udf3: resourceId,
-					udf4: context?.idempotency_key || "",
-				},
+					udf4: this.sanitizeMetaValue(context?.idempotency_key),
+				}),
 			};
 
 			if (!this.phonepe_.validatePaymentInput(paymentRequest)) {
 				throw new Error("Invalid payment request");
 			}
 
-			this.logger.info(
-				`Initiating payment: ${JSON.stringify({
-					merchantOrderId,
-					amount: paymentRequest.amount,
-					currency_code,
-				})}`,
-			);
+			this.logInfo("Initiating payment", {
+				merchantOrderId,
+				amount: paymentRequest.amount,
+				currency_code,
+			});
 
 			const response = await this.executeWithRetry(() =>
 				this.phonepe_.createPayment(paymentRequest),
@@ -333,7 +369,12 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				"orderId" in response &&
 				"redirectUrl" in response;
 			if (this.options_.enabledDebugLogging) {
-				this.logger.info(`Payment response: ${JSON.stringify(response)}`);
+				this.logInfo("Payment response received", {
+					merchantOrderId,
+					response: isOrderStatusResponse
+						? this.redactSensitiveData(response)
+						: this.maskValue("non_standard_response"),
+				});
 			}
 
 			if (isOrderStatusResponse) {
@@ -365,7 +406,7 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				};
 			}
 		} catch (error) {
-			this.logger.error(`Error initiating payment: ${JSON.stringify(error)}`);
+			this.logError("Error initiating payment", error);
 			throw this.buildError(
 				"An error occurred while initiating payment",
 				error as Error,
@@ -383,32 +424,21 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		data,
 		context: _context,
 	}: CapturePaymentInput): Promise<CapturePaymentOutput> {
-		const merchantOrderId = (data?.merchantOrderId ||
-			data?.merchantTransactionId) as string;
-
-		if (!merchantOrderId || typeof merchantOrderId !== "string") {
-			throw this.buildError(
-				"No merchant order ID provided while capturing payment",
-				new Error("No merchant order ID provided"),
-			);
-		}
-
 		try {
-			const orderStatus = await this.phonepe_.getOrderStatus(
+			const merchantOrderId = this.resolveMerchantOrderId(
+				[data?.merchantOrderId, data?.merchantTransactionId],
+				"capture payment",
+			);
+
+			const orderStatus = await this.getOrderStatusWithCache(
 				merchantOrderId,
 				true,
 			);
 			const state = orderStatus.state?.toUpperCase() || "";
 
 			if (!["SUCCESS", "COMPLETED", "PAID"].includes(state)) {
-				// Check if it's already captured
-				if (state === "SUCCESS" || state === "COMPLETED" || state === "PAID") {
-					return { data: orderStatus as unknown as Record<string, unknown> };
-				}
 				throw this.buildError(
-					`Payment not in success state: ${
-						state || "UNKNOWN"
-					}. Cannot capture.`,
+					`Payment not in success state: ${state || "UNKNOWN"}. Cannot capture.`,
 					new Error(`Payment state: ${state}`),
 				);
 			}
@@ -425,10 +455,6 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				} as unknown as Record<string, unknown>,
 			};
 		} catch (error) {
-			if (error instanceof Error && error.message.includes("success state")) {
-				// Already handled
-				throw error;
-			}
 			throw this.buildError(
 				"An error occurred in capturePayment",
 				error as Error,
@@ -441,16 +467,19 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		context: _context,
 	}: CancelPaymentInput): Promise<CancelPaymentOutput> {
 		try {
-			const merchantOrderId = (data?.merchantOrderId ||
-				data?.merchantTransactionId) as string;
+			const merchantOrderId = this.resolveMerchantOrderId(
+				[data?.merchantOrderId, data?.merchantTransactionId],
+				"cancel payment",
+				false,
+			);
 
-			if (!merchantOrderId || typeof merchantOrderId !== "string") {
+			if (!merchantOrderId) {
 				return { data: data || {} };
 			}
 
 			// PhonePe doesn't have a direct cancel API, so we check status
 			// and mark as canceled if not already captured
-			const orderStatus = await this.phonepe_.getOrderStatus(
+			const orderStatus = await this.getOrderStatusWithCache(
 				merchantOrderId,
 				true,
 			);
@@ -485,34 +514,39 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		data,
 		context: _context,
 	}: RefundPaymentInput): Promise<RefundPaymentOutput> {
-		const merchantOrderId = (data?.merchantOrderId ||
-			data?.merchantTransactionId) as string;
-		const originalMerchantOrderId = (data?.originalTransactionId ||
-			merchantOrderId) as string;
-
-		if (!merchantOrderId || !originalMerchantOrderId) {
-			throw this.buildError(
-				"No merchant order ID provided while refunding payment",
-				new Error("No merchant order ID provided"),
-			);
-		}
-
 		try {
-			const amountNumber = typeof amount === "number" ? amount : Number(amount);
+			const merchantOrderId = this.resolveMerchantOrderId(
+				[data?.merchantOrderId, data?.merchantTransactionId],
+				"refund payment",
+			);
+			const originalMerchantOrderId = this.resolveMerchantOrderId(
+				[data?.originalTransactionId, merchantOrderId],
+				"refund payment",
+			);
+
+			const normalizedAmount = this.normalizeAmount(amount, "refundAmount");
 			const refundInput: RefundInput = {
-				merchantRefundId: `${merchantOrderId}_refund_${Date.now()}`,
+				merchantRefundId: this.createRefundId(merchantOrderId),
 				originalMerchantOrderId,
-				amount: Number(amountNumber.toFixed(2)),
+				amount: normalizedAmount,
 			};
 
-			this.logger.info(`Creating refund: ${JSON.stringify(refundInput)}`);
+			this.logInfo("Creating refund", {
+				merchantOrderId,
+				originalMerchantOrderId,
+			});
 
 			const response = await this.executeWithRetry(() =>
 				this.phonepe_.refund(refundInput),
 			);
 
 			if (this.options_.enabledDebugLogging) {
-				this.logger.info(`Refund response: ${JSON.stringify(response)}`);
+				this.logInfo("Refund response received", {
+					merchantOrderId,
+					response: this.redactSensitiveData(
+						response as Record<string, unknown>,
+					),
+				});
 			}
 
 			const isRefundResponse =
@@ -551,17 +585,12 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		data,
 	}: RetrievePaymentInput): Promise<RetrievePaymentOutput> {
 		try {
-			const merchantOrderId = (data?.merchantOrderId ||
-				data?.merchantTransactionId) as string;
+			const merchantOrderId = this.resolveMerchantOrderId(
+				[data?.merchantOrderId, data?.merchantTransactionId],
+				"retrieve payment",
+			);
 
-			if (!merchantOrderId || typeof merchantOrderId !== "string") {
-				throw this.buildError(
-					"No merchant order ID provided while retrieving payment",
-					new Error("No merchant order ID provided"),
-				);
-			}
-
-			const orderStatus = await this.phonepe_.getOrderStatus(
+			const orderStatus = await this.getOrderStatusWithCache(
 				merchantOrderId,
 				true,
 			);
@@ -590,12 +619,10 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		context,
 	}: UpdatePaymentInput): Promise<UpdatePaymentOutput> {
 		// PhonePe doesn't allow updating an ongoing payment, so we initiate a new one
-		this.logger.info(
-			`Update payment request: ${JSON.stringify({
-				amount,
-				currency_code,
-			})}`,
-		);
+		this.logInfo("Update payment request", {
+			amount,
+			currency_code,
+		});
 
 		const initiateInput: InitiatePaymentInput = {
 			amount,
@@ -730,6 +757,13 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		authorizationHeader: string,
 		callbackBody: string,
 	): Promise<PhonePeEvent> {
+		if (!authorizationHeader) {
+			throw this.buildError(
+				"Missing authorization header for webhook validation",
+				new Error("Authorization header is required"),
+			);
+		}
+
 		try {
 			// Try SDK validation first
 			const callbackResponse = await this.phonepe_.validateWebhookCallback(
@@ -737,51 +771,44 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				callbackBody,
 			);
 
-			if (callbackResponse) {
-				// SDK validation succeeded - use the validated callback response
-				const payload = callbackResponse.payload || {};
-				const eventType = this.mapCallbackTypeToEventType(
-					callbackResponse.type,
+			if (!callbackResponse) {
+				throw this.buildError(
+					"Webhook validation failed",
+					new Error("PhonePe SDK did not validate callback"),
 				);
-
-				return {
-					event: eventType,
-					id:
-						payload.merchantOrderId ||
-						payload.orderId ||
-						payload.merchantTransactionId ||
-						"unknown",
-					data: {
-						object: {
-							code: callbackResponse.type,
-							message: "Webhook validated successfully",
-							data: {
-								merchantOrderId: payload.merchantOrderId,
-								merchantTransactionId:
-									payload.merchantTransactionId || payload.orderId,
-								orderId: payload.orderId,
-								state: payload.state,
-								amount: payload.amount,
-								paymentDetails: payload.paymentDetails,
-								paymentInstrument: payload.paymentInstrument,
-							},
-						} as any,
-					},
-				};
 			}
 
-			// Fallback to legacy validation if SDK validation is not available
-			this.logger.warn(
-				"SDK webhook validation not available, falling back to legacy validation",
-			);
-			return await this.buildLegacyWebhookEvent(
-				callbackBody,
-				authorizationHeader,
-			);
+			// SDK validation succeeded - use the validated callback response
+			const payload = callbackResponse.payload || {};
+			const eventType = this.mapCallbackTypeToEventType(callbackResponse.type);
+
+			return {
+				event: eventType,
+				id:
+					payload.merchantOrderId ||
+					payload.orderId ||
+					payload.merchantTransactionId ||
+					callbackResponse.id ||
+					"unknown",
+				data: {
+					object: {
+						code: callbackResponse.type,
+						message: "Webhook validated successfully",
+						data: {
+							merchantOrderId: payload.merchantOrderId,
+							merchantTransactionId:
+								payload.merchantTransactionId || payload.orderId,
+							orderId: payload.orderId,
+							state: payload.state,
+							amount: payload.amount,
+							paymentDetails: payload.paymentDetails,
+							paymentInstrument: payload.paymentInstrument,
+						},
+					} as any,
+				},
+			};
 		} catch (error) {
-			this.logger.error(
-				`Error constructing webhook event: ${JSON.stringify(error)}`,
-			);
+			this.logError("Error constructing webhook event", error);
 
 			// Try to parse the body for error details
 			try {
@@ -797,7 +824,7 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 							error: "Webhook validation failed",
 							code: "VALIDATION_ERROR",
 							message: (error as Error).message || "",
-							data: parsedBody.payload,
+							data: this.redactSensitiveData(parsedBody.payload) as any,
 						} as any,
 					},
 				};
@@ -832,98 +859,6 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		return typeMap[callbackType] || callbackType || "checkout.order.completed";
 	}
 
-	/**
-	 * Legacy webhook event construction (fallback)
-	 * Uses legacy validation when SDK validation is unavailable.
-	 * @param encodedData
-	 * @param authorizationHeader
-	 */
-	private async buildLegacyWebhookEvent(
-		encodedData: string,
-		authorizationHeader: string,
-	): Promise<PhonePeEvent> {
-		try {
-			const decodedBody = JSON.parse(
-				typeof encodedData === "string" && encodedData.startsWith("{")
-					? encodedData
-					: atob(encodedData),
-			) as PhonePeS2SResponse;
-
-			// Try to use the new validation method if possible
-			const callbackResponse = await this.phonepe_.validateWebhookCallback(
-				authorizationHeader,
-				encodedData,
-			);
-
-			if (callbackResponse) {
-				// New validation succeeded
-				const payload = callbackResponse.payload || {};
-				const eventType = this.mapCallbackTypeToEventType(
-					callbackResponse.type,
-				);
-
-				return {
-					event: eventType,
-					id:
-						payload.merchantOrderId ||
-						payload.orderId ||
-						payload.merchantTransactionId ||
-						decodedBody.data?.merchantTransactionId ||
-						decodedBody.data?.merchantOrderId ||
-						"unknown",
-					data: {
-						object: {
-							code: callbackResponse.type,
-							message: "Webhook validated successfully",
-							data: {
-								merchantOrderId: payload.merchantOrderId,
-								merchantTransactionId:
-									payload.merchantTransactionId || payload.orderId,
-								orderId: payload.orderId,
-								state: payload.state,
-								amount: payload.amount,
-								paymentDetails: payload.paymentDetails,
-								paymentInstrument: payload.paymentInstrument,
-							},
-						} as any,
-					},
-				};
-			}
-
-			// If new validation is not available, proceed without validation
-			// (the old deprecated method didn't actually validate properly)
-			this.logger.warn(
-				"Legacy webhook validation: proceeding without signature validation",
-			);
-
-			return {
-				event: decodedBody.code || "checkout.order.completed",
-				id:
-					decodedBody.data?.merchantTransactionId ||
-					decodedBody.data?.merchantOrderId ||
-					"unknown",
-				data: {
-					object: decodedBody,
-				},
-			};
-		} catch (error: unknown) {
-			this.logger.error(
-				`Error constructing webhook event (legacy): ${JSON.stringify(error)}`,
-			);
-			return {
-				event: PaymentStatusCodeValues.PAYMENT_ERROR,
-				id: "error_id",
-				data: {
-					object: {
-						error: "Failed to parse webhook data",
-						code: "PARSE_ERROR",
-						message: (error as Error).message || "",
-					} as any,
-				},
-			};
-		}
-	}
-
 	protected buildError(message: string, error: Error): Error {
 		// Remove reliance on PaymentProviderError, which isn't defined
 		// Instead, safely check if 'detail' property exists
@@ -932,11 +867,333 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				? (error.errorContext as PhonePeException)
 				: error;
 
-		return new Error(
-			`${message}: ${error.message}. ${
-				"cause" in errorDetails ? errorDetails.cause : ""
-			}`.trim(),
+		const cause =
+			typeof errorDetails === "object" &&
+			errorDetails !== null &&
+			"cause" in errorDetails &&
+			typeof (errorDetails as PhonePeException).cause === "string"
+				? (errorDetails as PhonePeException).cause
+				: undefined;
+
+		const sanitizedMessage = [message, error.message, cause]
+			.filter((part) => typeof part === "string" && part.trim().length > 0)
+			.join(": ");
+
+		return new Error(sanitizedMessage);
+	}
+
+	private resolveMerchantOrderId(
+		candidates: Array<unknown>,
+		action: string,
+		required: boolean = true,
+	): string {
+		for (const candidate of candidates) {
+			if (typeof candidate === "string" && candidate.trim().length > 0) {
+				return this.ensureValidMerchantOrderId(candidate, action);
+			}
+		}
+
+		if (required) {
+			// Use a simple error message that matches test expectations
+			// Convert "get payment status" to "getting payment status" for better readability
+			const actionText = action.replace(/^get /, "getting ");
+			throw new Error(`No merchant order ID provided while ${actionText}`);
+		}
+
+		return "";
+	}
+
+	private ensureValidMerchantOrderId(value: string, action: string): string {
+		const trimmed = value.trim();
+
+		if (!trimmed) {
+			throw this.buildError(
+				`Invalid merchant order ID while attempting to ${action}`,
+				new Error("Merchant order ID is empty"),
+			);
+		}
+
+		if (trimmed.length > 50) {
+			throw this.buildError(
+				`Invalid merchant order ID while attempting to ${action}`,
+				new Error("Merchant order ID exceeds 50 characters"),
+			);
+		}
+
+		if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+			throw this.buildError(
+				`Invalid merchant order ID while attempting to ${action}`,
+				new Error("Merchant order ID contains unsupported characters"),
+			);
+		}
+
+		return trimmed;
+	}
+
+	private normalizeAmount(value: unknown, field: string): number {
+		const numericValue =
+			typeof value === "number" ? value : Number(value ?? Number.NaN);
+
+		if (!Number.isFinite(numericValue)) {
+			throw this.buildError(
+				`Invalid ${field} provided`,
+				new Error("Amount is not a finite number"),
+			);
+		}
+
+		if (numericValue <= 0) {
+			throw this.buildError(
+				`Invalid ${field} provided`,
+				new Error("Amount must be greater than zero"),
+			);
+		}
+
+		return this.roundToTwoDecimals(numericValue);
+	}
+
+	private roundToTwoDecimals(value: number): number {
+		return Math.round(value * 100) / 100;
+	}
+
+	private normalizeResourceId(resourceId?: string): string | undefined {
+		if (!resourceId) {
+			return undefined;
+		}
+
+		const trimmed = resourceId.trim();
+		if (!trimmed) {
+			return undefined;
+		}
+
+		const sanitized = trimmed.replaceAll(/[^A-Za-z0-9._-]/g, "").slice(0, 20);
+		return sanitized || undefined;
+	}
+
+	private createMerchantOrderId(resourceId?: string): string {
+		const uuidSegment = randomUUID().replaceAll("-", "").slice(0, 16);
+
+		if (!resourceId) {
+			return uuidSegment;
+		}
+
+		const base = resourceId.slice(0, 20);
+		const candidate = `${base}-${uuidSegment}`;
+		return candidate.length > 50 ? candidate.slice(0, 50) : candidate;
+	}
+
+	private createRefundId(merchantOrderId: string): string {
+		const timestampSegment = Date.now().toString(36);
+		const uuidSegment = randomUUID().replaceAll("-", "").slice(0, 8);
+		const candidate = `${merchantOrderId}-${timestampSegment}${uuidSegment}`;
+		return candidate.length > 50 ? candidate.slice(0, 50) : candidate;
+	}
+
+	private sanitizeMetaValue(value: unknown): string | undefined {
+		if (value === null || value === undefined) {
+			return undefined;
+		}
+
+		let stringValue: string | undefined;
+		if (typeof value === "string") {
+			stringValue = value;
+		} else if (
+			typeof value === "number" ||
+			typeof value === "bigint" ||
+			typeof value === "boolean"
+		) {
+			stringValue = String(value);
+		} else if (value instanceof Date) {
+			stringValue = value.toISOString();
+		} else {
+			return undefined;
+		}
+
+		const trimmed = stringValue.trim();
+		if (!trimmed) {
+			return undefined;
+		}
+
+		return trimmed.slice(0, 50);
+	}
+
+	private compactMetaInfo(
+		metaInfo: StandardPayInput["metaInfo"],
+	): StandardPayInput["metaInfo"] | undefined {
+		if (!metaInfo) {
+			return undefined;
+		}
+
+		const compactedEntries = Object.entries(metaInfo).filter(
+			([, value]) => value !== undefined && value !== "",
 		);
+
+		if (compactedEntries.length === 0) {
+			return undefined;
+		}
+
+		return Object.fromEntries(compactedEntries);
+	}
+
+	private maskValue(value: unknown): string {
+		let rawValue = "";
+		if (typeof value === "string") {
+			rawValue = value;
+		} else if (typeof value === "number" || typeof value === "bigint") {
+			rawValue = String(value);
+		} else if (typeof value === "boolean") {
+			rawValue = value ? "true" : "false";
+		} else if (value instanceof Date) {
+			rawValue = value.toISOString();
+		} else if (value) {
+			try {
+				rawValue = JSON.stringify(value);
+			} catch {
+				rawValue = "";
+			}
+		}
+
+		if (!rawValue) {
+			return "";
+		}
+
+		if (rawValue.length <= 6) {
+			return `${rawValue.slice(0, 1)}***${rawValue.slice(-1)}`;
+		}
+
+		return `${rawValue.slice(0, 4)}***${rawValue.slice(-4)}`;
+	}
+
+	private redactSensitiveData(data: unknown): unknown {
+		if (!data || typeof data !== "object") {
+			return data;
+		}
+
+		if (Array.isArray(data)) {
+			return data.map((item) => this.redactSensitiveData(item));
+		}
+
+		const sensitiveKeys = new Set([
+			"merchantOrderId",
+			"merchantTransactionId",
+			"orderId",
+			"refundId",
+			"paymentInstrument",
+			"paymentDetails",
+			"clientSecret",
+			"access_token",
+			"token",
+			"authorization",
+		]);
+
+		return Object.fromEntries(
+			Object.entries(data as Record<string, unknown>).map(([key, value]) => {
+				if (sensitiveKeys.has(key)) {
+					return [key, this.maskValue(value)];
+				}
+
+				if (typeof value === "object" && value !== null) {
+					return [key, this.redactSensitiveData(value)];
+				}
+
+				return [key, value];
+			}),
+		);
+	}
+
+	private formatLogData(data: Record<string, unknown>): string {
+		const redacted = this.redactSensitiveData(data) as Record<string, unknown>;
+
+		return Object.entries(redacted)
+			.map(([key, value]) => `${key}=${this.serializeLogValue(value)}`)
+			.join(" ");
+	}
+
+	private serializeLogValue(value: unknown): string {
+		if (value === undefined || value === null) {
+			return "<null>";
+		}
+
+		if (typeof value === "string") {
+			return value;
+		}
+
+		if (typeof value === "number" || typeof value === "bigint") {
+			return String(value);
+		}
+
+		if (typeof value === "boolean") {
+			return value ? "true" : "false";
+		}
+
+		if (typeof value === "symbol") {
+			return value.toString();
+		}
+
+		if (typeof value === "function") {
+			return "<function>";
+		}
+
+		if (typeof value === "object") {
+			try {
+				return JSON.stringify(value);
+			} catch {
+				return "<unserializable>";
+			}
+		}
+
+		return "<unhandled>";
+	}
+
+	private logInfo(message: string, data?: Record<string, unknown>): void {
+		if (data && Object.keys(data).length > 0) {
+			this.logger.info(`${message} ${this.formatLogData(data)}`);
+			return;
+		}
+
+		this.logger.info(message);
+	}
+
+	private logError(
+		message: string,
+		error: unknown,
+		data?: Record<string, unknown>,
+	): void {
+		const errorDescription =
+			error instanceof Error ? error.message : this.serializeLogValue(error);
+
+		const parts = [`${message}`, `error=${errorDescription}`];
+		if (data && Object.keys(data).length > 0) {
+			parts.push(this.formatLogData(data));
+		}
+
+		this.logger.error(parts.join(" "));
+	}
+
+	private ensureValidUrl(urlValue: string | undefined, field: string): void {
+		if (!urlValue) {
+			throw this.buildError(
+				`Missing required ${field} for PhonePe configuration`,
+				new Error(`${field} is not defined`),
+			);
+		}
+
+		try {
+			const parsedUrl = new URL(urlValue);
+			const isLocalhost =
+				parsedUrl.hostname === "localhost" ||
+				parsedUrl.hostname === "127.0.0.1";
+
+			if (parsedUrl.protocol !== "https:" && !isLocalhost) {
+				throw new Error(
+					"URL must use HTTPS scheme unless pointing to localhost",
+				);
+			}
+		} catch (error) {
+			throw this.buildError(
+				`Invalid ${field} provided`,
+				error instanceof Error ? error : new Error(String(error)),
+			);
+		}
 	}
 }
 

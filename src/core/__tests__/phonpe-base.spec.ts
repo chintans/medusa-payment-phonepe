@@ -432,12 +432,11 @@ describe("PhonePeTest", () => {
 			executeSpy.mockRestore();
 		});
 
-		it("falls back to legacy webhook construction when SDK validation is unavailable", async () => {
+		it("throws error when authorization header is missing for webhook validation", async () => {
 			const callbackBody = JSON.stringify(responseHookData);
-			const result = await phonepeTest.constructWebhookEvent("", callbackBody);
-
-			expect(result.event).toBe(responseHookData.code);
-			expect(result.data?.object).toMatchObject(responseHookData);
+			await expect(
+				phonepeTest.constructWebhookEvent("", callbackBody),
+			).rejects.toThrow("Missing authorization header for webhook validation");
 		});
 	});
 
