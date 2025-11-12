@@ -4,7 +4,7 @@ import PhonePeProviderService from "./services/phonepe-provider.js";
 const services = [PhonePeProviderService];
 
 export default ModuleProvider(Modules.PAYMENT, {
-  services,
+	services,
 });
 
 export * from "./core/phonepe-base.js";

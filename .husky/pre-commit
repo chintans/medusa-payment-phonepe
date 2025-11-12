@@ -1,2 +1,2 @@
-pnpx lint-staged
+pnpx lint-staged --config lint-staged.config.js
 

@@ -17,105 +17,105 @@ const mockEnabled = process.env.DISABLE_MOCKS == "true" ? false : true;
  *
  */
 export function isMocksEnabled(): boolean {
-  if (mockEnabled) {
-    console.log("using mocks");
-  }
-  return mockEnabled;
+	if (mockEnabled) {
+		console.log("using mocks");
+	}
+	return mockEnabled;
 }
 
 export const PhonePeMock = {
-  paymentIntents: {
-    retrieve: vi.fn().mockImplementation(async (paymentId) => {
-      if (paymentId === FAIL_INTENT_ID) {
-        throw new Error("Error");
-      }
+	paymentIntents: {
+		retrieve: vi.fn().mockImplementation(async (paymentId) => {
+			if (paymentId === FAIL_INTENT_ID) {
+				throw new Error("Error");
+			}
 
-      return (
-        Object.values(PaymentIntentDataByStatus).find((value) => {
-          return value.id === paymentId;
-        }) ?? {}
-      );
-    }),
-    update: vi.fn().mockImplementation(async (paymentId, updateData: any) => {
-      if (paymentId === FAIL_INTENT_ID) {
-        throw new Error("Error");
-      }
+			return (
+				Object.values(PaymentIntentDataByStatus).find((value) => {
+					return value.id === paymentId;
+				}) ?? {}
+			);
+		}),
+		update: vi.fn().mockImplementation(async (paymentId, updateData: any) => {
+			if (paymentId === FAIL_INTENT_ID) {
+				throw new Error("Error");
+			}
 
-      const data =
-        Object.values(PaymentIntentDataByStatus).find((value) => {
-          return value.id === paymentId;
-        }) ?? {};
+			const data =
+				Object.values(PaymentIntentDataByStatus).find((value) => {
+					return value.id === paymentId;
+				}) ?? {};
 
-      return { ...data, ...updateData };
-    }),
-    create: vi.fn().mockImplementation(async (data: any) => {
-      if (data.description === "fail") {
-        throw new Error("Error");
-      }
+			return { ...data, ...updateData };
+		}),
+		create: vi.fn().mockImplementation(async (data: any) => {
+			if (data.description === "fail") {
+				throw new Error("Error");
+			}
 
-      return data;
-    }),
-    cancel: vi.fn().mockImplementation(async (paymentId) => {
-      if (paymentId === FAIL_INTENT_ID) {
-        throw new Error("Error");
-      }
+			return data;
+		}),
+		cancel: vi.fn().mockImplementation(async (paymentId) => {
+			if (paymentId === FAIL_INTENT_ID) {
+				throw new Error("Error");
+			}
 
-      if (paymentId === PARTIALLY_FAIL_INTENT_ID) {
-        throw new Error(
-          JSON.stringify({
-            code: ErrorCodes.PAYMENT_INTENT_UNEXPECTED_STATE,
-            payment_intent: {
-              id: paymentId,
-              status: ErrorIntentStatus.CANCELED,
-            } as any,
-            type: "invalid_request_error",
-          })
-        );
-      }
+			if (paymentId === PARTIALLY_FAIL_INTENT_ID) {
+				throw new Error(
+					JSON.stringify({
+						code: ErrorCodes.PAYMENT_INTENT_UNEXPECTED_STATE,
+						payment_intent: {
+							id: paymentId,
+							status: ErrorIntentStatus.CANCELED,
+						} as any,
+						type: "invalid_request_error",
+					}),
+				);
+			}
 
-      return { id: paymentId };
-    }),
-    capture: vi.fn().mockImplementation(async (paymentId) => {
-      if (paymentId === FAIL_INTENT_ID) {
-        throw new Error("Error");
-      }
+			return { id: paymentId };
+		}),
+		capture: vi.fn().mockImplementation(async (paymentId) => {
+			if (paymentId === FAIL_INTENT_ID) {
+				throw new Error("Error");
+			}
 
-      if (paymentId === PARTIALLY_FAIL_INTENT_ID) {
-        throw new Error(
-          JSON.stringify({
-            code: ErrorCodes.PAYMENT_INTENT_UNEXPECTED_STATE,
-            payment_intent: {
-              id: paymentId,
-              status: ErrorIntentStatus.SUCCEEDED,
-            } as any,
-            type: "invalid_request_error",
-          })
-        );
-      }
+			if (paymentId === PARTIALLY_FAIL_INTENT_ID) {
+				throw new Error(
+					JSON.stringify({
+						code: ErrorCodes.PAYMENT_INTENT_UNEXPECTED_STATE,
+						payment_intent: {
+							id: paymentId,
+							status: ErrorIntentStatus.SUCCEEDED,
+						} as any,
+						type: "invalid_request_error",
+					}),
+				);
+			}
 
-      return { id: paymentId };
-    }),
-  },
-  refunds: {
-    create: vi
-      .fn()
-      .mockImplementation(async ({ payment_intent: paymentId }: any) => {
-        if (paymentId === FAIL_INTENT_ID) {
-          throw new Error("Error");
-        }
+			return { id: paymentId };
+		}),
+	},
+	refunds: {
+		create: vi
+			.fn()
+			.mockImplementation(async ({ payment_intent: paymentId }: any) => {
+				if (paymentId === FAIL_INTENT_ID) {
+					throw new Error("Error");
+				}
 
-        return { id: paymentId };
-      }),
-  },
-  customers: {
-    create: vi.fn().mockImplementation(async (data: any) => {
-      if (data.email === EXISTING_CUSTOMER_EMAIL) {
-        return { id: PHONEPE_ID, ...data };
-      }
+				return { id: paymentId };
+			}),
+	},
+	customers: {
+		create: vi.fn().mockImplementation(async (data: any) => {
+			if (data.email === EXISTING_CUSTOMER_EMAIL) {
+				return { id: PHONEPE_ID, ...data };
+			}
 
-      throw new Error("Error");
-    }),
-  },
+			throw new Error("Error");
+		}),
+	},
 };
 
 const phonepe = vi.fn(() => PhonePeMock);

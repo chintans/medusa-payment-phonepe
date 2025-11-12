@@ -6,37 +6,37 @@ import { BigNumber, MathBN } from "@medusajs/framework/utils";
  * @param currency
  */
 function getCurrencyMultiplier(currency: string): number {
-  const currencyMultipliers: Record<string, string[]> = {
-    0: [
-      "BIF",
-      "CLP",
-      "DJF",
-      "GNF",
-      "JPY",
-      "KMF",
-      "KRW",
-      "MGA",
-      "PYG",
-      "RWF",
-      "UGX",
-      "VND",
-      "VUV",
-      "XAF",
-      "XOF",
-      "XPF",
-    ],
-    3: ["BHD", "IQD", "JOD", "KWD", "OMR", "TND"],
-  };
+	const currencyMultipliers: Record<string, string[]> = {
+		0: [
+			"BIF",
+			"CLP",
+			"DJF",
+			"GNF",
+			"JPY",
+			"KMF",
+			"KRW",
+			"MGA",
+			"PYG",
+			"RWF",
+			"UGX",
+			"VND",
+			"VUV",
+			"XAF",
+			"XOF",
+			"XPF",
+		],
+		3: ["BHD", "IQD", "JOD", "KWD", "OMR", "TND"],
+	};
 
-  const currencyUpper = currency.toUpperCase();
-  let power = 2;
-  for (const [key, value] of Object.entries(currencyMultipliers)) {
-    if (value.includes(currencyUpper)) {
-      power = Number.parseInt(key, 10);
-      break;
-    }
-  }
-  return Math.pow(10, power);
+	const currencyUpper = currency.toUpperCase();
+	let power = 2;
+	for (const [key, value] of Object.entries(currencyMultipliers)) {
+		if (value.includes(currencyUpper)) {
+			power = Number.parseInt(key, 10);
+			break;
+		}
+	}
+	return Math.pow(10, power);
 }
 
 /**
@@ -48,24 +48,24 @@ function getCurrencyMultiplier(currency: string): number {
  * @returns {number} - The converted amount in the smallest currency unit.
  */
 export function getSmallestUnit(
-  amount: BigNumberInput,
-  currency: string
+	amount: BigNumberInput,
+	currency: string,
 ): number {
-  const multiplier = getCurrencyMultiplier(currency);
+	const multiplier = getCurrencyMultiplier(currency);
 
-  const amount_ =
-    Math.round(new BigNumber(MathBN.mult(amount, multiplier)).numeric) /
-    multiplier;
+	const amount_ =
+		Math.round(new BigNumber(MathBN.mult(amount, multiplier)).numeric) /
+		multiplier;
 
-  const smallestAmount = new BigNumber(MathBN.mult(amount_, multiplier));
+	const smallestAmount = new BigNumber(MathBN.mult(amount_, multiplier));
 
-  let numeric = smallestAmount.numeric;
-  // Check if the currency requires rounding to the nearest ten
-  if (multiplier === 1e3) {
-    numeric = Math.ceil(numeric / 10) * 10;
-  }
+	let numeric = smallestAmount.numeric;
+	// Check if the currency requires rounding to the nearest ten
+	if (multiplier === 1e3) {
+		numeric = Math.ceil(numeric / 10) * 10;
+	}
 
-  return Number.parseInt(numeric.toString().split(".").shift()!, 10);
+	return Number.parseInt(numeric.toString().split(".").shift()!, 10);
 }
 
 /**
@@ -75,10 +75,10 @@ export function getSmallestUnit(
  * @returns {number} - The converted amount in the standard currency unit.
  */
 export function getAmountFromSmallestUnit(
-  amount: BigNumberInput,
-  currency: string
+	amount: BigNumberInput,
+	currency: string,
 ): number {
-  const multiplier = getCurrencyMultiplier(currency);
-  const standardAmount = new BigNumber(MathBN.div(amount, multiplier));
-  return standardAmount.numeric;
+	const multiplier = getCurrencyMultiplier(currency);
+	const standardAmount = new BigNumber(MathBN.div(amount, multiplier));
+	return standardAmount.numeric;
 }

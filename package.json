@@ -1,105 +1,109 @@
 {
-  "name": "@promactinfo/medusa-payment-phonepe",
-  "version": "2.1.0",
-  "description": "PhonePe payment provider for Medusa Commerce",
-  "private": false,
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "type": "module",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/chintans/medusa-payment-phonepe.git"
-  },
-  "bugs": {
-    "url": "https://github.com/chintans/medusa-payment-phonepe/issues"
-  },
-  "homepage": "https://github.com/chintans/medusa-payment-phonepe#readme",
-  "files": [
-    "dist",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "author": "Chintan Shah",
-  "license": "MIT",
-  "scripts": {
-    "prepare": "husky && cross-env NODE_ENV=production pnpm run build",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "build": "vite build",
-    "check:exports": "attw --pack .",
-    "build:watch": "vite build --watch",
-    "lint": "biome check .",
-    "lint:fix": "biome check --fix .",
-    "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
-    "prepublishOnly": "pnpm run lint && pnpm run test && pnpm run build && pnpm run build:types",
-    "release": "standard-version",
-    "release:minor": "standard-version --release-as minor",
-    "release:major": "standard-version --release-as major",
-    "release:first": "standard-version --first-release"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.5",
-    "@commitlint/cli": "^19.0.0",
-    "@commitlint/config-conventional": "^19.0.0",
-    "@eslint/js": "^9.39.1",
-    "@medusajs/framework": "^2.0.0",
-    "@types/express": "^4.17.17",
-    "awilix": "^12.0.5",
-    "axios": "^1.13.2",
-    "axios-mock-adapter": "^2.1.0",
-    "body-parser": "^2.0.0",
-    "cross-env": "^10.0.0",
-    "crypto-js": "^4.1.1",
-    "dotenv": "^17.0.0",
-    "express": "^4.17.1",
-    "globals": "^15.11.0",
-    "husky": "^9.0.0",
-    "lint-staged": "^15.0.0",
-    "prettier": "^2.7.1",
-    "standard-version": "^9.5.0",
-    "terser": "^5.36.0",
-    "typeorm": "^0.3.20",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.2",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.0.8"
-  },
-  "peerDependencies": {
-    "@medusajs/framework": "^2.0.0",
-    "axios": "^1.7.0",
-    "express": "^4.17.1",
-    "typeorm": "^0.3.20"
-  },
-  "dependencies": {
-    "@arethetypeswrong/cli": "^0.18.2",
-    "crypto-js": "^4.1.1",
-    "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node.tgz",
-    "ts-retry": "^4.2.1"
-  },
-  "engines": {
-    "node": ">=18.18",
-    "pnpm": ">=8"
-  },
-  "gitHead": "81a7ff73d012fda722f6e9ef0bd9ba0232d37808",
-  "keywords": [
-    "medusa-plugin",
-    "medusa-plugin-payment",
-    "phonepe"
-  ],
-  "packageManager": "pnpm@10.21.0+sha512.da3337267e400fdd3d479a6c68079ac6db01d8ca4f67572083e722775a796788a7a9956613749e000fac20d424b594f7a791a5f4e2e13581c5ef947f26968a40"
+	"name": "@promactinfo/medusa-payment-phonepe",
+	"version": "2.1.0",
+	"description": "PhonePe payment provider for Medusa Commerce",
+	"private": false,
+	"main": "dist/index.js",
+	"module": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"require": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	},
+	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chintans/medusa-payment-phonepe.git"
+	},
+	"bugs": {
+		"url": "https://github.com/chintans/medusa-payment-phonepe/issues"
+	},
+	"homepage": "https://github.com/chintans/medusa-payment-phonepe#readme",
+	"files": [
+		"dist",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
+	],
+	"author": "Chintan Shah",
+	"license": "MIT",
+	"scripts": {
+		"prepare": "husky && cross-env NODE_ENV=production pnpm run build",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"build": "vite build",
+		"check:exports": "attw --pack .",
+		"build:watch": "vite build --watch",
+		"lint": "biome check .",
+		"lint:fix": "biome check --fix .",
+		"build:types": "tsc --emitDeclarationOnly --declaration --declarationMap",
+		"prepublishOnly": "pnpm run lint && pnpm run test && pnpm run build && pnpm run build:types",
+		"release": "standard-version",
+		"release:minor": "standard-version --release-as minor",
+		"release:major": "standard-version --release-as major",
+		"release:first": "standard-version --first-release"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.5",
+		"@commitlint/cli": "^19.0.0",
+		"@commitlint/config-conventional": "^19.0.0",
+		"@eslint/js": "^9.39.1",
+		"@medusajs/framework": "^2.0.0",
+		"@types/express": "^4.17.17",
+		"awilix": "^12.0.5",
+		"axios": "^1.13.2",
+		"axios-mock-adapter": "^2.1.0",
+		"body-parser": "^2.0.0",
+		"cross-env": "^10.0.0",
+		"crypto-js": "^4.1.1",
+		"dotenv": "^17.0.0",
+		"express": "^4.17.1",
+		"globals": "^15.11.0",
+		"husky": "^9.0.0",
+		"lint-staged": "^15.0.0",
+		"prettier": "^2.7.1",
+		"standard-version": "^9.5.0",
+		"terser": "^5.36.0",
+		"typeorm": "^0.3.20",
+		"typescript": "^5.9.3",
+		"vite": "^7.2.2",
+		"vite-plugin-dts": "^4.5.4",
+		"vitest": "^4.0.8"
+	},
+	"peerDependencies": {
+		"@medusajs/framework": "^2.0.0",
+		"axios": "^1.7.0",
+		"express": "^4.17.1",
+		"typeorm": "^0.3.20"
+	},
+	"dependencies": {
+		"@arethetypeswrong/cli": "^0.18.2",
+		"crypto-js": "^4.1.1",
+		"pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node.tgz",
+		"ts-retry": "^4.2.1"
+	},
+	"engines": {
+		"node": ">=18.18",
+		"pnpm": ">=8"
+	},
+	"gitHead": "81a7ff73d012fda722f6e9ef0bd9ba0232d37808",
+	"keywords": [
+		"medusa-plugin",
+		"medusa-plugin-payment",
+		"phonepe"
+	],
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": "biome check --fix .",
+		"*.{css,scss,md}": "biome check --fix ."
+	},
+	"packageManager": "pnpm@10.21.0+sha512.da3337267e400fdd3d479a6c68079ac6db01d8ca4f67572083e722775a796788a7a9956613749e000fac20d424b594f7a791a5f4e2e13581c5ef947f26968a40"
 }
