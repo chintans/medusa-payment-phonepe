@@ -1100,57 +1100,8 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		);
 	}
 
-	private formatLogData(data: Record<string, unknown>): string {
-		const redacted = this.redactSensitiveData(data) as Record<string, unknown>;
-
-		return Object.entries(redacted)
-			.map(([key, value]) => `${key}=${this.serializeLogValue(value)}`)
-			.join(" ");
-	}
-
-	private serializeLogValue(value: unknown): string {
-		if (value === undefined || value === null) {
-			return "<null>";
-		}
-
-		if (typeof value === "string") {
-			return value;
-		}
-
-		if (typeof value === "number" || typeof value === "bigint") {
-			return String(value);
-		}
-
-		if (typeof value === "boolean") {
-			return value ? "true" : "false";
-		}
-
-		if (typeof value === "symbol") {
-			return value.toString();
-		}
-
-		if (typeof value === "function") {
-			return "<function>";
-		}
-
-		if (typeof value === "object") {
-			try {
-				return JSON.stringify(value);
-			} catch {
-				return "<unserializable>";
-			}
-		}
-
-		return "<unhandled>";
-	}
-
 	private logInfo(message: string, data?: Record<string, unknown>): void {
-		if (data && Object.keys(data).length > 0) {
-			this.logger.info(`${message} ${this.formatLogData(data)}`);
-			return;
-		}
-
-		this.logger.info(message);
+		this.log("info", message, data);
 	}
 
 	private logError(
@@ -1158,15 +1109,65 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 		error: unknown,
 		data?: Record<string, unknown>,
 	): void {
-		const errorDescription =
-			error instanceof Error ? error.message : this.serializeLogValue(error);
+		this.log("error", message, data, error);
+	}
 
-		const parts = [`${message}`, `error=${errorDescription}`];
-		if (data && Object.keys(data).length > 0) {
-			parts.push(this.formatLogData(data));
+	private log(
+		level: "info" | "error",
+		message: string,
+		data?: Record<string, unknown>,
+		error?: unknown,
+	): void {
+		const serialized = this.createStructuredLog(level, message, data, error);
+
+		if (level === "error") {
+			this.logger.error(serialized);
+			return;
 		}
 
-		this.logger.error(parts.join(" "));
+		this.logger.info(serialized);
+	}
+
+	private createStructuredLog(
+		level: "info" | "error",
+		message: string,
+		data?: Record<string, unknown>,
+		error?: unknown,
+	): string {
+		const payload: Record<string, unknown> = {
+			level,
+			message,
+			provider: "medusa-payment-phonepe",
+			timestamp: new Date().toISOString(),
+		};
+
+		if (data && Object.keys(data).length > 0) {
+			payload.context = this.redactSensitiveData(data);
+		}
+
+		if (error) {
+			payload.error = this.normalizeError(error);
+		}
+
+		return JSON.stringify(payload);
+	}
+
+	private normalizeError(error: unknown): Record<string, unknown> {
+		if (error instanceof Error) {
+			return {
+				name: error.name,
+				message: error.message,
+				stack: error.stack,
+			};
+		}
+
+		if (typeof error === "object" && error !== null) {
+			return this.redactSensitiveData(error) as Record<string, unknown>;
+		}
+
+		return {
+			message: String(error),
+		};
 	}
 
 	private ensureValidUrl(urlValue: string | undefined, field: string): void {
