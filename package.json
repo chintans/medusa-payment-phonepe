@@ -40,7 +40,6 @@
     "prepare": "husky && cross-env NODE_ENV=production pnpm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "postbuild": "pnpm run check:exports",
     "build": "vite build",
     "check:exports": "attw --pack .",
     "build:watch": "vite build --watch",
