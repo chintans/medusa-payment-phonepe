@@ -445,7 +445,7 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 				data?.merchantTransactionId) as string;
 
 			if (!merchantOrderId || typeof merchantOrderId !== "string") {
-				return { data: (data || {}) as Record<string, unknown> };
+				return { data: data || {} };
 			}
 
 			// PhonePe doesn't have a direct cancel API, so we check status
@@ -628,17 +628,17 @@ abstract class PhonePeBase extends AbstractPaymentProvider<PhonePeOptions> {
 			callbackBody,
 		);
 
-		const paymentData = event.data.object as PhonePeS2SResponse;
+		const paymentData = event.data.object;
 		const payload = paymentData?.data || (paymentData as any)?.data?.data || {};
 
 		const merchantOrderId =
-			(payload.merchantOrderId as string | undefined) ||
+			payload.merchantOrderId ||
 			(payload.merchantTransactionId as string | undefined) ||
 			((payload as any).orderId as string | undefined) ||
 			event.id;
 
-		const amount = (payload.amount as number) || 0;
-		const state = (payload.state as string)?.toUpperCase() || "";
+		const amount = payload.amount || 0;
+		const state = payload.state?.toUpperCase() || "";
 		const code = paymentData?.code || event.event || "";
 		const eventType: string = code || event.event;
 

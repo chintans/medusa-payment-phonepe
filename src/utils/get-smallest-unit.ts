@@ -2,40 +2,46 @@ import { BigNumberInput } from "@medusajs/framework/types";
 import { BigNumber, MathBN } from "@medusajs/framework/utils";
 
 /**
- *
- * @param currency
+ * Map of currency codes to their decimal power (exponent for 10^power multiplier).
+ * Currencies with power 0 have no decimal places (multiplier = 1).
+ * Currencies with power 3 have 3 decimal places (multiplier = 1000).
+ * Default power is 2 (multiplier = 100) for most currencies.
+ */
+const CURRENCY_POWER_MAP = new Map<string, number>([
+	// Power 0 currencies (multiplier = 1)
+	["BIF", 0],
+	["CLP", 0],
+	["DJF", 0],
+	["GNF", 0],
+	["JPY", 0],
+	["KMF", 0],
+	["KRW", 0],
+	["MGA", 0],
+	["PYG", 0],
+	["RWF", 0],
+	["UGX", 0],
+	["VND", 0],
+	["VUV", 0],
+	["XAF", 0],
+	["XOF", 0],
+	["XPF", 0],
+	// Power 3 currencies (multiplier = 1000)
+	["BHD", 3],
+	["IQD", 3],
+	["JOD", 3],
+	["KWD", 3],
+	["OMR", 3],
+	["TND", 3],
+]);
+
+/**
+ * Gets the currency multiplier based on the currency code.
+ * @param currency - The currency code (e.g., 'INR', 'USD', 'JPY').
+ * @returns The multiplier (10^power) for the currency. Default is 100 (power 2).
  */
 function getCurrencyMultiplier(currency: string): number {
-	const currencyMultipliers: Record<string, string[]> = {
-		0: [
-			"BIF",
-			"CLP",
-			"DJF",
-			"GNF",
-			"JPY",
-			"KMF",
-			"KRW",
-			"MGA",
-			"PYG",
-			"RWF",
-			"UGX",
-			"VND",
-			"VUV",
-			"XAF",
-			"XOF",
-			"XPF",
-		],
-		3: ["BHD", "IQD", "JOD", "KWD", "OMR", "TND"],
-	};
-
 	const currencyUpper = currency.toUpperCase();
-	let power = 2;
-	for (const [key, value] of Object.entries(currencyMultipliers)) {
-		if (value.includes(currencyUpper)) {
-			power = Number.parseInt(key, 10);
-			break;
-		}
-	}
+	const power = CURRENCY_POWER_MAP.get(currencyUpper) ?? 2;
 	return Math.pow(10, power);
 }
 
@@ -65,7 +71,7 @@ export function getSmallestUnit(
 		numeric = Math.ceil(numeric / 10) * 10;
 	}
 
-	return Number.parseInt(numeric.toString().split(".").shift()!, 10);
+	return Math.floor(numeric);
 }
 
 /**
